@@ -1,0 +1,236 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic admin tokens, resolved from the single :root palette.
+   Utilities like `bg-surface`, `text-fg`, `border-outline` are generated from
+   these via the inline theme, so components never hardcode a mode. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-fill-faint: var(--fill-faint);
+  --color-outline: var(--outline);
+  --color-outline-strong: var(--outline-strong);
+  --color-outline-faint: var(--outline-faint);
+  --color-fg: var(--fg);
+  --color-fg-soft: var(--fg-soft);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+
+  /* Layout scale. One max-width and one gutter shared by every band of the
+     storefront, so the header, the hero and the sections below all break on
+     the same vertical lines. Resolved from :root below, which lets the gutter
+     step at breakpoints. */
+  --container-site: var(--site-max);
+  --spacing-gutter: var(--gutter);
+}
+
+@theme {
+  --color-sage: #7c8a5e;
+  --color-sage-dark: #66734b;
+  --color-sage-light: #9aa880;
+  --color-cream: #f1ece1;
+  --color-cream-dark: #e5ddcc;
+  --color-espresso: #241c14;
+  --color-espresso-soft: #3a2f24;
+  --color-terracotta: #c77b5d;
+  --color-terracotta-light: #dd9c82;
+
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  --radius-bento: 2rem;
+  --radius-bento-lg: 2.5rem;
+
+  --shadow-soft: 0 2px 40px -8px rgb(36 28 20 / 0.12);
+  --shadow-lift: 0 24px 60px -20px rgb(36 28 20 / 0.28);
+}
+
+@layer base {
+  :root {
+    /* Fixed header: 40px utility + 80px brand row + 56px category row = 176px.
+       JS overrides this on scroll and at smaller breakpoints. */
+    --header-h: 176px;
+
+    /* Shared layout frame: max-w-site + px-gutter. */
+    --site-max: 1600px;
+    --gutter: 1.25rem; /* 20px, mobile */
+
+    /* Semantic admin tokens. */
+    color-scheme: light;
+
+    --bg: #f1ece1;
+    --surface: rgb(255 255 255 / 0.75);
+    --field: rgb(255 255 255 / 0.75);
+    --fill: rgb(36 28 20 / 0.06);
+    --fill-strong: rgb(36 28 20 / 0.1);
+    --fill-faint: rgb(36 28 20 / 0.04);
+    --outline: rgb(36 28 20 / 0.13);
+    --outline-strong: rgb(36 28 20 / 0.25);
+    --outline-faint: rgb(36 28 20 / 0.07);
+    --fg: #241c14;
+    --fg-soft: rgb(36 28 20 / 0.65);
+    --fg-muted: rgb(36 28 20 / 0.5);
+    --fg-faint: rgb(36 28 20 / 0.4);
+    --accent: #241c14;
+    --on-accent: #f5efe3;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23241c14' fill-opacity='0.5'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5' stroke='%23241c14' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg: #241c14;
+    --surface: rgb(47 39 30 / 0.85);
+    --field: rgb(245 239 227 / 0.08);
+    --fill: rgb(245 239 227 / 0.1);
+    --fill-strong: rgb(245 239 227 / 0.16);
+    --fill-faint: rgb(245 239 227 / 0.06);
+    --outline: rgb(245 239 227 / 0.16);
+    --outline-strong: rgb(245 239 227 / 0.3);
+    --outline-faint: rgb(245 239 227 / 0.09);
+    --fg: #f5efe3;
+    --fg-soft: rgb(245 239 227 / 0.68);
+    --fg-muted: rgb(245 239 227 / 0.55);
+    --fg-faint: rgb(245 239 227 / 0.42);
+    --accent: #f5efe3;
+    --on-accent: #241c14;
+    --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23f5efe3' fill-opacity='0.5'%3E%3Cpath d='M5.5 7.5 10 12l4.5-4.5' stroke='%23f5efe3' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  }
+
+  /* Gutter steps: 20px → 32px at md → 48px at xl. */
+  @media (min-width: 768px) {
+    :root {
+      --gutter: 2rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    :root {
+      --gutter: 3rem;
+    }
+  }
+
+  /* Below lg the category row drops into the drawer, leaving the utility +
+     brand rows: 120px from md up, 80px below it. */
+  @media (max-width: 1023px) {
+    :root {
+      --header-h: 120px;
+    }
+  }
+
+  @media (max-width: 767px) {
+    :root {
+      --header-h: 80px;
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-espresso);
+    font-family: var(--font-sans);
+    line-height: 1.65;
+  }
+
+  ::selection {
+    background-color: var(--color-terracotta);
+    color: var(--color-cream);
+  }
+}
+
+@layer utilities {
+  /* Oversized brutalist display type: tight tracking + optically aligned */
+  .text-display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.15;
+    font-kerning: normal;
+  }
+
+  .text-eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Soft fade at both edges of a horizontal scroller, so a row that overflows
+     reads as "there is more this way" instead of being chopped off. Pair with
+     `no-scrollbar` and `scroll-smooth`. --fade-x tunes the ramp width. */
+  .edge-fade-x {
+    --fade-x: 32px;
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-x),
+      #000 calc(100% - var(--fade-x)),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 var(--fade-x),
+      #000 calc(100% - var(--fade-x)),
+      transparent 100%
+    );
+  }
+
+  /* Tailwind's scroll-smooth, which it only emits for the pseudo-class. */
+  .scroll-smooth-x {
+    scroll-behavior: smooth;
+  }
+
+  /* Admin: toast entrance */
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Admin: modal entrance. Backdrop fades, panel fades in with a slight
+     scale. Both are wrapped in `motion-safe:` at the call site, so a visitor
+     who asks for reduced motion never sees them. */
+  @keyframes modalIn {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

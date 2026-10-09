@@ -1,0 +1,1 @@
+﻿const fs=require('fs'); const {Client}=require('pg'); let sql=fs.readFileSync('db/migrations/013_team_members.sql','utf8'); if(sql.charCodeAt(0)===65279)sql=sql.slice(1); const c=new Client({connectionString:process.env.DATABASE_URL}); c.connect().then(async()=>{try{await c.query(sql);console.log('ok');}catch(e){console.error('err');process.exit(1);}finally{await c.end();}});

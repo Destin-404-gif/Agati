@@ -1,0 +1,46 @@
+{
+  "name": "agati-store",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:setup": "node scripts/setup-db.mjs all",
+    "db:schema": "node scripts/setup-db.mjs schema",
+    "db:seed": "node scripts/setup-db.mjs seed",
+    "db:migrate": "node scripts/setup-migrations.mjs",
+    "imgs": "node scripts/import-images.mjs --clean",
+"imgs:probe": "node scripts/import-images.mjs --probe",
+    "db:admin": "node scripts/setup-admin-db.mjs all",
+    "db:admin:schema": "node scripts/setup-admin-db.mjs schema",
+    "db:admin:seed": "node scripts/setup-admin-db.mjs seed",
+    "db:admin:reset": "node scripts/reset-admin-password.mjs",
+    "db:media": "node scripts/seed-media.mjs",
+    "verify": "node scripts/setup-db.mjs all && node scripts/verify.mjs"
+  },
+  "dependencies": {
+    "framer-motion": "^12.43.0",
+    "jose": "^6.2.12",
+    "lucide-react": "1.48.0",
+    "next": "16.3.6",
+    "pg": "^8.23.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "playwright": "^1.63.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

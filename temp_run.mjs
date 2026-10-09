@@ -1,0 +1,1 @@
+﻿import {Client} from 'pg'; import {readFileSync} from 'fs'; const sql=readFileSync('temp_team.sql','utf8'); const c=new Client({connectionString:process.env.DATABASE_URL}); await c.connect(); try{await c.query(sql); console.log('ok');}catch(e){console.error(e.message); process.exit(1);} finally{await c.end();}

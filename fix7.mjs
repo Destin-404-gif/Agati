@@ -1,0 +1,1 @@
+const fs=require('fs'); const p='C:/xampp/htdocs/Agati/src/app/(site)/search/page.tsx'; let c=fs.readFileSync(p,'utf8'); if(c.indexOf('relevance) ? sp.sort')>-1){ c=c.split('relevance) ? sp.sort').join('relevance\') ? (sp.sort'); fs.writeFileSync(p,c); console.log('ok'); } else { console.log('no'); }
