@@ -64,7 +64,7 @@ async function serve(
 
   let info;
   try {
-    info = await stat(file);
+    info = await stat(/*turbopackIgnore: true*/ file);
   } catch {
     return NOT_FOUND();
   }
@@ -92,7 +92,7 @@ async function serve(
 
   let body: Buffer;
   try {
-    body = await readFile(file);
+    body = await readFile(/*turbopackIgnore: true*/ file);
   } catch {
     return NOT_FOUND();
   }

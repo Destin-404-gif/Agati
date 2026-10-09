@@ -13,7 +13,7 @@ import {
 import {
   normaliseTerm,
   isSearchable,
-  
+  isSearchSort,
   search,
   RESULTS_PER_PAGE,
   type SearchSort,
