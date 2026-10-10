@@ -9,7 +9,7 @@
  * Server-only (uses `node:fs` and sharp).
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -259,6 +259,209 @@ async function renderVariants(
   return { variants, originalWidth, originalHeight };
 }
 
+/* ------------------------------------------------------------- cloudinary */
+
+/**
+ * Cloudinary credentials, read from the environment.
+ *
+ * Present in production (and in any local setup pointed at an account). Absent
+ * otherwise, in which case `storeUpload` falls back to the on-disk
+ * `storage/uploads` path so `npm run dev` keeps working without a cloud account.
+ * In production the fallback is refused outright - an ephemeral disk silently
+ * losing pictures is exactly the failure this module now exists to prevent.
+ */
+export interface CloudinaryConfig {
+  cloudName: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
+export function cloudinaryConfig(): CloudinaryConfig | null {
+  // `CLOUDINARY_URL` (cloudinary://key:secret@cloud) is accepted too, so a
+  // single copied connection string is enough.
+  const url = process.env.CLOUDINARY_URL?.trim();
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      const cloudName = parsed.hostname;
+      const apiKey = decodeURIComponent(parsed.username);
+      const apiSecret = decodeURIComponent(parsed.password);
+      if (cloudName && apiKey && apiSecret) return { cloudName, apiKey, apiSecret };
+    } catch {
+      // fall through to the individual variables
+    }
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  if (cloudName && apiKey && apiSecret) return { cloudName, apiKey, apiSecret };
+  return null;
+}
+
+/** Every upload lands in this Cloudinary folder, keeping the account tidy. */
+const CLOUDINARY_FOLDER = "agati";
+
+/**
+ * Cloudinary's signature: every signable parameter (everything except `file`,
+ * `api_key`, `cloud_name`, `resource_type` and `signature`), sorted by key,
+ * joined `k=v&…`, with the API secret appended and SHA-1 hashed.
+ */
+function cloudinarySignature(params: Record<string, string>, apiSecret: string): string {
+  const signable = Object.keys(params)
+    .filter(
+      (key) =>
+        params[key] !== undefined &&
+        params[key] !== null &&
+        !["file", "api_key", "cloud_name", "resource_type", "signature"].includes(key),
+    )
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+  return createHash("sha1").update(signable + apiSecret).digest("hex");
+}
+
+interface CloudinaryUpload {
+  secureUrl: string;
+  publicId: string;
+  bytes: number | null;
+}
+
+/**
+ * Upload one buffer to Cloudinary and return its public HTTPS url and id.
+ *
+ * Talks to the REST endpoint with a signed multipart body instead of pulling in
+ * the SDK, so the app carries no extra runtime dependency. `format` fixes the
+ * stored format; the public id carries no extension, which is how Cloudinary
+ * expects it.
+ */
+async function uploadToCloudinary(
+  config: CloudinaryConfig,
+  buffer: Buffer,
+  options: { publicId: string; format: string; contentType: string },
+): Promise<CloudinaryUpload> {
+  const params: Record<string, string> = {
+    folder: CLOUDINARY_FOLDER,
+    format: options.format,
+    invalidate: "true",
+    overwrite: "true",
+    public_id: options.publicId,
+    timestamp: String(Math.floor(Date.now() / 1000)),
+    unique_filename: "false",
+  };
+  params.api_key = config.apiKey;
+  params.signature = cloudinarySignature({ ...params }, config.apiSecret);
+
+  const form = new FormData();
+  form.append(
+    "file",
+    new Blob([new Uint8Array(buffer)], { type: options.contentType }),
+    `${options.publicId}.${options.format}`,
+  );
+  for (const [key, value] of Object.entries(params)) form.append(key, value);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/upload`, {
+    method: "POST",
+    body: form,
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    secure_url?: string;
+    public_id?: string;
+    bytes?: number;
+    error?: { message?: string };
+  };
+  if (!res.ok || !data.secure_url || !data.public_id) {
+    throw new Error(data.error?.message ?? `Cloudinary upload failed (${res.status}).`);
+  }
+  return {
+    secureUrl: data.secure_url,
+    publicId: data.public_id,
+    bytes: data.bytes ?? null,
+  };
+}
+
+/** Delete one Cloudinary asset by public id. A missing asset is not an error. */
+async function destroyInCloudinary(config: CloudinaryConfig, publicId: string): Promise<void> {
+  try {
+    const params: Record<string, string> = {
+      public_id: publicId,
+      timestamp: String(Math.floor(Date.now() / 1000)),
+    };
+    params.api_key = config.apiKey;
+    params.signature = cloudinarySignature({ ...params }, config.apiSecret);
+
+    const form = new FormData();
+    for (const [key, value] of Object.entries(params)) form.append(key, value);
+
+    await fetch(`https://api.cloudinary.com/v1_1/${config.cloudName}/image/destroy`, {
+      method: "POST",
+      body: form,
+    });
+  } catch (err) {
+    console.error("[media-upload] Cloudinary delete failed", publicId, err);
+  }
+}
+
+/**
+ * The public id encoded in a Cloudinary delivery url: everything after the
+ * `/v<version>/` segment, minus the extension. Works for the pristine
+ * `secure_url` and for any `w_*` transformed variant of it, so replacing or
+ * deleting a picture cleans up the one asset behind every size.
+ */
+export function cloudinaryPublicIdFromUrl(url: string): string | null {
+  const match = /res\.cloudinary\.com\/[^/]+\/image\/upload\/(.+)$/i.exec(url);
+  if (!match) return null;
+  const segments = match[1]!.split("/");
+  const versionAt = segments.findIndex((segment) => /^v\d+$/.test(segment));
+  const idPart = versionAt >= 0 ? segments.slice(versionAt + 1).join("/") : match[1]!;
+  const withoutExt = idPart.replace(/\.[a-z0-9]+$/i, "");
+  return withoutExt || null;
+}
+
+/**
+ * Re-encode the bytes into one high-definition master, at full resolution.
+ *
+ * Photographs become high-quality WebP (q92) and graphics stay lossless PNG,
+ * matching the local pipeline's quality without ever downscaling - the
+ * responsive sizes are produced later by Cloudinary URL transforms, so the
+ * master has to keep every source pixel.
+ */
+async function renderMaster(
+  raw: Buffer,
+  lossless: boolean,
+): Promise<{ buffer: Buffer; width: number; height: number }> {
+  const pipeline = sharp(raw, { failOn: "error" }).rotate().toColourspace("srgb");
+  const buffer = lossless
+    ? await pipeline.png({ compressionLevel: 9, effort: 7, adaptiveFiltering: true }).toBuffer()
+    : await pipeline.webp({ quality: 92, effort: 5, smartSubsample: true }).toBuffer();
+  const meta = await sharp(buffer).metadata();
+  return { buffer, width: meta.width ?? 0, height: meta.height ?? 0 };
+}
+
+/** The responsive buckets that actually exist for an image of this size. */
+function variantWidthsFor(longest: number): number[] {
+  const widths = IMAGE_VARIANT_WIDTHS.filter((width) => width <= longest);
+  return widths.length > 0 ? [...widths] : [longest || IMAGE_VARIANT_WIDTHS[0]];
+}
+
+/**
+ * A Cloudinary delivery url for one responsive width, derived from the master's
+ * `secure_url` by inserting a transform. `c_limit` never enlarges, q90 keeps the
+ * picture high-definition, and `f_auto` lets Cloudinary pick the best format the
+ * browser accepts - all without storing another copy.
+ */
+function cloudinaryTransformUrl(secureUrl: string, width: number, lossless: boolean): string {
+  const transform = lossless ? `w_${width},c_limit` : `w_${width},c_limit,q_90,f_auto`;
+  return secureUrl.replace("/image/upload/", `/image/upload/${transform}/`);
+}
+
+function cloudinaryError(err: unknown): string {
+  const message = err instanceof Error ? err.message : "";
+  return message
+    ? `The image could not be uploaded to storage: ${message}`
+    : "The image could not be uploaded to storage. Try again.";
+}
+
 /**
  * Validate, re-encode and store an uploaded file.
  *
@@ -297,31 +500,62 @@ export async function storeUpload(
     };
   }
 
+  const cloud = cloudinaryConfig();
+  if (!cloud && process.env.NODE_ENV === "production") {
+    return {
+      ok: false,
+      error:
+        "Image storage is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET.",
+    };
+  }
+
+  const base = safeBase();
+
+  // -------------------------------------------------------------------- SVG
   if (mime === SVG_TYPE) {
     const problem = validateSvg(raw.toString("utf8"));
     if (problem) return { ok: false, error: problem };
 
-    const name = `${safeBase()}.svg`;
-    await mkdir(UPLOAD_DIR, { recursive: true });
-    await writeFile(path.join(UPLOAD_DIR, name), raw);
+    let url: string;
+    let originalPath: string | null = null;
+    let bytes = raw.byteLength;
+
+    if (cloud) {
+      try {
+        const uploaded = await uploadToCloudinary(cloud, raw, {
+          publicId: base,
+          format: "svg",
+          contentType: SVG_TYPE,
+        });
+        url = uploaded.secureUrl;
+        originalPath = uploaded.publicId;
+        bytes = uploaded.bytes ?? raw.byteLength;
+      } catch (err) {
+        return { ok: false, error: cloudinaryError(err) };
+      }
+    } else {
+      const name = `${base}.svg`;
+      await mkdir(UPLOAD_DIR, { recursive: true });
+      await writeFile(path.join(UPLOAD_DIR, name), raw);
+      url = `/uploads/${name}`;
+    }
 
     // An SVG scales, so every "variant" is the same file - browsers rasterise it
     // at whatever size the page asks for. The file itself is already vector and
     // lossless, so there is nothing to resize and no original to keep.
-    const url = `/uploads/${name}`;
     const upload: PreparedUpload = {
       id: 0,
       url,
       thumbUrl: url,
       originalName: file.name.slice(0, 255),
-      filename: name,
+      filename: cloud ? `${base}.svg` : path.basename(url),
       mime: SVG_TYPE,
-      bytes: raw.byteLength,
+      bytes,
       width: null,
       height: null,
       originalWidth: null,
       originalHeight: null,
-      originalPath: null,
+      originalPath,
       variants: [],
       variant400Url: url,
       variant1200Url: url,
@@ -335,10 +569,94 @@ export async function storeUpload(
     return { ok: true, upload };
   }
 
+  // ----------------------------------------------------------------- raster
+  const lossless = mime === "image/png";
+  const ext = lossless ? "png" : "webp";
+
+  if (cloud) return storeRasterInCloud(cloud, raw, base, ext, lossless, file, staffEmail);
+  return storeRasterOnDisk(raw, base, ext, lossless, mime, file, staffEmail);
+}
+
+/** Production path: one HD master in Cloudinary, responsive sizes by URL. */
+async function storeRasterInCloud(
+  cloud: CloudinaryConfig,
+  raw: Buffer,
+  base: string,
+  ext: string,
+  lossless: boolean,
+  file: File,
+  staffEmail: string,
+): Promise<UploadResult> {
+  let master: { buffer: Buffer; width: number; height: number };
+  try {
+    master = await withEncodeSlot(() => renderMaster(raw, lossless));
+  } catch {
+    return { ok: false, error: "That file could not be decoded as an image." };
+  }
+
+  let uploaded: CloudinaryUpload;
+  try {
+    uploaded = await uploadToCloudinary(cloud, master.buffer, {
+      publicId: base,
+      format: ext,
+      contentType: lossless ? "image/png" : "image/webp",
+    });
+  } catch (err) {
+    return { ok: false, error: cloudinaryError(err) };
+  }
+
+  const longest = Math.max(master.width, master.height) || Math.max(...IMAGE_VARIANT_WIDTHS);
+  const written: ImageVariant[] = variantWidthsFor(longest).map((width) => ({
+    width,
+    url: cloudinaryTransformUrl(uploaded.secureUrl, width, lossless),
+  }));
+
+  const largest = written[written.length - 1]!;
+  const smallest = written[0]!;
+  /** The best transform for a bucket: the widest that still fits, else the largest. */
+  const atBucket = (target: number): string => {
+    const under = written.filter((variant) => variant.width <= target);
+    return (under.length > 0 ? under[under.length - 1]! : largest).url;
+  };
+
+  const upload: PreparedUpload = {
+    id: 0,
+    url: uploaded.secureUrl,
+    thumbUrl: smallest.url,
+    originalName: file.name.slice(0, 255),
+    filename: `${base}.${ext}`,
+    mime: lossless ? "image/png" : "image/webp",
+    bytes: uploaded.bytes ?? master.buffer.byteLength,
+    width: master.width,
+    height: master.height,
+    originalWidth: master.width,
+    originalHeight: master.height,
+    originalPath: uploaded.publicId,
+    variants: written,
+    variant400Url: atBucket(400),
+    variant1200Url: atBucket(1200),
+    variant2560Url: atBucket(2560),
+    variant3840Url: atBucket(3840),
+    qualityTier: qualityTier(longest),
+  };
+
+  const inserted = await recordUpload(upload, staffEmail);
+  upload.id = inserted.id;
+  return { ok: true, upload };
+}
+
+/** Development / persistent-disk path: sharp-rendered variants under `storage/`. */
+async function storeRasterOnDisk(
+  raw: Buffer,
+  base: string,
+  ext: string,
+  lossless: boolean,
+  mime: string,
+  file: File,
+  staffEmail: string,
+): Promise<UploadResult> {
   // Re-encode rather than trusting the extension or the client's MIME type. A
   // file that is not really an image throws here, inside sharp.
-  const lossless = mime === "image/png";
-
   let rendered: { width: number; bytes: number; buffer: Buffer }[];
   let originalWidth: number;
   let originalHeight: number;
@@ -351,8 +669,6 @@ export async function storeUpload(
     return { ok: false, error: "That file could not be decoded as an image." };
   }
 
-  const base = safeBase();
-  const ext = lossless ? "png" : "webp";
   const written: ImageVariant[] = [];
 
   await mkdir(UPLOAD_DIR, { recursive: true });
@@ -441,19 +757,43 @@ async function removeBaseIn(dir: string, base: string): Promise<void> {
   await Promise.all(targets.map((name) => unlink(path.join(dir, name)).catch(() => {})));
 }
 
-/** Remove every stored file belonging to the uploads behind these urls. */
+/**
+ * Remove every stored file belonging to the uploads behind these urls.
+ *
+ * A url may be a legacy local `/uploads/...` path (deleted from `storage/`) or a
+ * Cloudinary `secure_url` (its whole variant family is deleted with one call,
+ * because every size shares the one asset).
+ */
 export async function removeStoredFiles(urls: (string | null)[]): Promise<void> {
   const bases = new Set<string>();
+  const publicIds = new Set<string>();
+
   for (const url of urls) {
-    if (!url || !url.startsWith("/uploads/")) continue;
-    // `path.basename` collapses a traversal string, so a stored url cannot reach
-    // outside the upload directory.
-    const name = path.basename(url);
-    if (!/^[\w.-]+$/.test(name)) continue;
-    const base = name.replace(/(-w\d+)?\.(?:webp|png|jpe?g|avif|svg)$/i, "");
-    bases.add(base);
+    if (!url) continue;
+
+    if (url.startsWith("/uploads/")) {
+      // `path.basename` collapses a traversal string, so a stored url cannot
+      // reach outside the upload directory.
+      const name = path.basename(url);
+      if (!/^[\w.-]+$/.test(name)) continue;
+      bases.add(name.replace(/(-w\d+)?\.(?:webp|png|jpe?g|avif|svg)$/i, ""));
+      continue;
+    }
+
+    const publicId = cloudinaryPublicIdFromUrl(url);
+    if (publicId) publicIds.add(publicId);
   }
-  await Promise.all([...bases].map(removeBase));
+
+  const tasks: Promise<unknown>[] = [...bases].map((base) => removeBase(base));
+
+  const cloud = cloudinaryConfig();
+  if (cloud) {
+    for (const publicId of publicIds) {
+      tasks.push(destroyInCloudinary(cloud, publicId));
+    }
+  }
+
+  await Promise.all(tasks);
 }
 
 /** Remove one upload's whole variant set, given its base name. */

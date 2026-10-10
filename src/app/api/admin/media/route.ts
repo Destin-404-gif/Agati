@@ -3,6 +3,7 @@ import { z } from "zod";
 import { readJson, withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { ensureMediaSlot } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
 
@@ -80,16 +81,25 @@ export const PATCH = withAuth(
     const body = await readJson(req, patchSchema);
     const { slotKey, url, altText } = body;
 
-    // Reject a slot key the admin UI never offered. Without this, any string
-    // could be written into the table and would then be rendered on a page.
+    // The registry (`src/lib/media-slots.ts`) is the single source of truth for
+    // which slot keys the admin UI offers. Ensure the row exists before writing:
+    // a slot that is in the registry but has no row yet (a fresh database, or a
+    // category panel added since the last seed) is created on first assign
+    // rather than rejected. Only a key the registry does not know is an error,
+    // and the message names it so a mismatch can be debugged.
+    const resolved = await ensureMediaSlot(slotKey);
+    if (!resolved) {
+      return NextResponse.json(
+        { error: `Unknown image slot: ${slotKey}` },
+        { status: 400 },
+      );
+    }
+
     const slot = await query<{ slot_key: string; label: string; image_url: string | null }>(
       `SELECT slot_key, label, image_url FROM media_slots WHERE slot_key = $1`,
       [slotKey],
     );
-    const target = slot[0];
-    if (!target) {
-      return NextResponse.json({ error: "Unknown image slot." }, { status: 400 });
-    }
+    const target = slot[0]!;
 
     if (url === null) {
       await query(

@@ -66,11 +66,33 @@ export function qualityBadge(longestSide: number | null | undefined): QualityBad
   };
 }
 
-/** Read the pixel width back out of a `<base>-w1234.webp` style url. */
+/**
+ * Read the pixel width back out of an upload url.
+ *
+ * Two shapes are understood:
+ *  - a locally stored variant, named `<base>-w1234.webp`;
+ *  - a Cloudinary delivery transform, e.g.
+ *    `.../image/upload/w_1200,c_limit,q_90,f_auto/v1731/agati/<base>.webp`.
+ *
+ * Cloudinary transforms are the production shape: the master is stored once and
+ * every responsive size is derived from it by URL, so no per-size file exists to
+ * name. Parsing the transform keeps `buildSrcSet` and `variantsFromUrls` working
+ * unchanged.
+ */
 export function variantWidthFromUrl(url: string | null | undefined): number | null {
   if (!url) return null;
-  const match = /-w(\d{2,5})\.(?:webp|png|jpe?g|avif)$/i.exec(url);
-  return match ? Number(match[1]) : null;
+
+  const named = /-w(\d{2,5})\.(?:webp|png|jpe?g|avif)$/i.exec(url);
+  if (named) return Number(named[1]);
+
+  // `upload/<transform>/v<version>/...` - pull the `w_<n>` out of the transform.
+  const segment = /\/upload\/([^/]*)\/v\d+\//i.exec(url);
+  if (segment) {
+    const width = /(?:^|,)w_(\d{1,5})(?:,|$)/i.exec(segment[1]!);
+    if (width) return Number(width[1]);
+  }
+
+  return null;
 }
 
 /**

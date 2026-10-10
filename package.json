@@ -18,6 +18,8 @@
     "db:admin:seed": "node scripts/setup-admin-db.mjs seed",
     "db:admin:reset": "node scripts/reset-admin-password.mjs",
     "db:media": "node scripts/seed-media.mjs",
+    "db:sync-slots": "node scripts/sync-media-slots.mjs",
+    "db:missing-images": "node scripts/check-missing-images.mjs",
     "verify": "node scripts/setup-db.mjs all && node scripts/verify.mjs"
   },
   "dependencies": {

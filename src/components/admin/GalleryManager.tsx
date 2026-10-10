@@ -96,6 +96,9 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
       }));
       setQueue(entries);
 
+      let succeeded = 0;
+      let failed = 0;
+
       for (const [index, file] of files.entries()) {
         const key = entries[index]!.key;
         const patch = (next: Partial<QueueEntry>) =>
@@ -103,6 +106,7 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
 
         const problem = localFileProblem(file);
         if (problem) {
+          failed += 1;
           patch({ error: problem, done: true });
           continue;
         }
@@ -114,8 +118,10 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
           if (data.item) {
             setItems((prev) => [...prev, data.item as GalleryItemRow]);
           }
+          succeeded += 1;
           patch({ percent: 100, done: true });
         } catch (err) {
+          failed += 1;
           patch({
             error: err instanceof Error ? err.message : "Upload failed.",
             done: true,
@@ -124,9 +130,17 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
       }
 
       uploading.current = false;
-      toast.success(
-        `${files.length} ${files.length === 1 ? "image" : "images"} processed.`,
-      );
+      if (failed > 0) {
+        // Never report a clean success when some files did not make it: the
+        // per-row errors above name each failure, this makes the count obvious.
+        toast.error(
+          `${failed} of ${files.length} ${files.length === 1 ? "image" : "images"} failed to upload. See the list above.`,
+        );
+      } else {
+        toast.success(
+          `${succeeded} ${succeeded === 1 ? "image" : "images"} uploaded.`,
+        );
+      }
       // The queue clears itself once every row has finished, so the grid is not
       // permanently pushed down by a stale list.
       window.setTimeout(() => setQueue([]), 2500);
