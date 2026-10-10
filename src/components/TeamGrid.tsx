@@ -1,33 +1,36 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { AtSign, Camera, Mail, MessageCircle, type LucideIcon } from "lucide-react";
 import { Reveal, RevealItem } from "./Reveal";
 
-type TeamRole = "owner" | "administrator" | "worker";
-type TeamStatus = "working" | "off_duty" | "on_leave";
-
-interface PublicTeamMember {
-  id: number;
-  full_name: string;
-  role: TeamRole;
-  job_title: string | null;
-  photo_url: string | null;
-  status: TeamStatus;
-}
-
-const ROLE_LABELS: Record<TeamRole, string> = {
-  owner: "Owner",
-  administrator: "Administrators",
-  worker: "Workers",
+export type TeamSocial = {
+  label: string;
+  href: string;
+  handle?: string;
 };
 
-const ROLE_ORDER: TeamRole[] = ["owner", "administrator", "worker"];
+/**
+ * The shape every member is rendered from. Adding someone is a new entry in the
+ * array on the team page - no markup changes. The member whose `isOwner` is true
+ * is pulled out and rendered as the featured block automatically.
+ */
+export type TeamMember = {
+  id: string | number;
+  name: string;
+  role: string;
+  photo: string | null;
+  isOwner: boolean;
+  bio: string | null;
+  socials: TeamSocial[];
+};
 
-const STATUS_LABELS: Record<TeamStatus, string> = {
-  working: "Working",
-  off_duty: "Off duty",
-  on_leave: "On leave",
+const SOCIAL_ICONS: Record<string, LucideIcon> = {
+  Instagram: Camera,
+  X: AtSign,
+  WhatsApp: MessageCircle,
+  Email: Mail,
 };
 
 function initials(name: string): string {
@@ -39,188 +42,191 @@ function initials(name: string): string {
     .join("");
 }
 
-function MemberSkeleton() {
-  return (
-    <div className="animate-pulse overflow-hidden rounded-[2rem] bg-white shadow-soft">
-      <div className="aspect-[4/5] w-full bg-cream-dark" />
-      <div className="space-y-2 p-5">
-        <div className="h-4 w-3/4 rounded-full bg-cream-dark" />
-        <div className="h-3 w-1/2 rounded-full bg-cream-dark" />
-      </div>
-    </div>
-  );
-}
-
-function StatusChip({ status }: { status: TeamStatus }) {
-  if (status === "working") {
+function MemberPhoto({ member }: { member: TeamMember }) {
+  if (member.photo) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-sage px-3 py-1 text-[11px] font-bold tracking-wide text-cream uppercase">
-        <span className="h-1.5 w-1.5 rounded-full bg-cream" />
-        Working
-      </span>
+      <Image
+        src={member.photo}
+        alt={`${member.name} - ${member.role}`}
+        fill
+        sizes="(max-width: 767px) 45vw, (max-width: 1023px) 30vw, 200px"
+        loading="lazy"
+        className="object-cover"
+      />
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-espresso/15 px-3 py-1 text-[11px] font-semibold tracking-wide text-espresso/55 uppercase">
-      {STATUS_LABELS[status]}
+    <span className="flex size-full items-center justify-center bg-sage p-4 text-center font-display text-4xl font-black text-cream">
+      {initials(member.name) || "AW"}
     </span>
   );
 }
 
-export function TeamGrid() {
-  const [members, setMembers] = useState<PublicTeamMember[] | null>(null);
-  const [tab, setTab] = useState<"all" | "working">("all");
-
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch("/api/team/public", { cache: "no-store" });
-      const data = await res.json();
-      setMembers(Array.isArray(data) ? data : []);
-    } catch {
-      setMembers([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  const filtered = useMemo(() => {
-    const list = members ?? [];
-    if (tab === "working") return list.filter((m) => m.status === "working");
-    return list;
-  }, [members, tab]);
-
-  const sections = useMemo(
-    () =>
-      ROLE_ORDER.map((role) => ({
-        role,
-        label: ROLE_LABELS[role],
-        members: filtered.filter((m) => m.role === role),
-      })).filter((s) => s.members.length > 0),
-    [filtered],
+function SocialLinks({
+  member,
+  className = "",
+}: {
+  member: TeamMember;
+  className?: string;
+}) {
+  if (member.socials.length === 0) return null;
+  return (
+    <div className={`flex flex-wrap gap-2.5 ${className}`}>
+      {member.socials.map((social) => {
+        const Icon = SOCIAL_ICONS[social.label] ?? Mail;
+        return (
+          <a
+            key={social.label}
+            href={social.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`${social.label}${social.handle ? ` - ${social.handle}` : ""}`}
+            aria-label={`${member.name} on ${social.label}`}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-espresso/5 text-espresso/55 transition-colors duration-300 hover:bg-terracotta hover:text-cream"
+          >
+            <Icon className="size-[18px]" aria-hidden />
+          </a>
+        );
+      })}
+    </div>
   );
+}
 
-  if (members === null) {
-    return (
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <MemberSkeleton key={i} />
-        ))}
+/** Standard circular member card: no ring, socials fade in on hover. */
+function MemberCard({ member }: { member: TeamMember }) {
+  return (
+    <article className="group flex h-full flex-col items-center text-center">
+      <div className="relative size-36 sm:size-44 lg:size-52">
+        <div className="relative h-full w-full overflow-hidden rounded-full bg-cream-dark shadow-soft ring-1 ring-espresso/10 transition-all duration-300 ease-out group-hover:scale-[1.045] group-hover:shadow-lift">
+          <MemberPhoto member={member} />
+
+          {member.socials.length > 0 && (
+            <div className="absolute inset-x-0 bottom-3 flex justify-center gap-2 opacity-0 transition-opacity duration-300 group-hover:opacity-100 focus-within:opacity-100">
+              {member.socials.map((social) => {
+                const Icon = SOCIAL_ICONS[social.label] ?? Mail;
+                return (
+                  <a
+                    key={social.label}
+                    href={social.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`${member.name} on ${social.label}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-espresso/80 text-cream backdrop-blur-sm transition-colors duration-300 hover:bg-terracotta"
+                  >
+                    <Icon className="size-3.5" aria-hidden />
+                  </a>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-    );
-  }
+
+      <h3 className="mt-5 text-[17px] leading-tight font-bold tracking-tight text-espresso">
+        {member.name}
+      </h3>
+      <div className="mt-1 flex min-h-6 items-center justify-center">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-terracotta">
+          {member.role}
+        </p>
+      </div>
+    </article>
+  );
+}
+
+export function TeamGrid({ members }: { members: TeamMember[] }) {
+  const owner = useMemo(() => members.find((m) => m.isOwner) ?? null, [members]);
+  const others = useMemo(() => members.filter((m) => !m.isOwner), [members]);
 
   if (members.length === 0) {
     return (
       <div className="rounded-[2rem] bg-white px-6 py-20 text-center shadow-soft">
-        <p className="text-eyebrow text-terracotta">Team</p>
+        <p className="text-eyebrow text-terracotta">Our bench</p>
         <h2 className="mt-4 text-display text-[clamp(1.6rem,3vw,2.2rem)] text-espresso">
           The workshop is forming.
         </h2>
         <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-espresso/60">
-          We are recruiting and will introduce our people here as they join the bench.
-        </p>
-      </div>
-    );
-  }
-
-  if (sections.length === 0) {
-    return (
-      <div className="rounded-[2rem] bg-white px-6 py-20 text-center shadow-soft">
-        <p className="text-[15px] leading-relaxed text-espresso/60">
-          Nobody on the bench is marked as working right now - the coffee machine should be blamed, not the joiners.
+          We are recruiting and will introduce our people here as they join the
+          bench.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-14">
-      {/* ---------------------------------------------------------- filter */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-full border border-espresso/10 bg-white p-1 shadow-soft">
-          {([
-            { key: "all", label: "All Team" },
-            { key: "working", label: "Currently Working" },
-          ] as const).map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`cursor-pointer rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
-                tab === t.key
-                  ? "bg-espresso text-cream"
-                  : "text-espresso/60 hover:text-espresso"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs uppercase tracking-[0.14em] text-espresso/40">
-          {tab === "all"
-            ? `${filtered.length} on the roster`
-            : `${filtered.length} at the bench right now`}
-        </p>
-      </div>
+    <div className="space-y-16 sm:space-y-20">
+      {/* --------------------------------------------- featured owner block */}
+      {owner && (
+        <Reveal>
+          <RevealItem fade>
+            <div className="mx-auto max-w-4xl">
+              <div className="flex flex-col items-center gap-12 text-center lg:flex-row lg:items-center lg:gap-16 lg:text-left">
+                <div className="relative shrink-0">
+                  <div
+                    className="relative size-[280px] overflow-hidden rounded-full border-4 border-terracotta bg-cream-dark sm:size-[320px]"
+                    style={{
+                      boxShadow:
+                        "0 0 0 14px rgba(199,123,93,0.15), 0 24px 60px -20px rgba(36,28,20,0.35)",
+                    }}
+                  >
+                    <MemberPhoto member={owner} />
+                  </div>
+                  <span className="absolute -bottom-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-terracotta px-4 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-cream shadow-lift">
+                    Founder &amp; Owner
+                  </span>
+                </div>
 
-      {/* ------------------------------------------------------- sections */}
-      {sections.map((section) => (
-        <section key={section.role}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-eyebrow text-terracotta">Workshop lead</p>
+                  <h2 className="mt-3 font-display text-[clamp(2rem,4vw,3.25rem)] leading-[1.1] font-bold text-espresso">
+                    {owner.name}
+                  </h2>
+                  <p className="mt-2 text-[12px] font-semibold uppercase tracking-[0.16em] text-espresso/45">
+                    {owner.role}
+                  </p>
+                  {owner.bio && (
+                    <p className="mx-auto mt-5 max-w-xl text-[16px] leading-relaxed text-espresso/70 lg:mx-0">
+                      {owner.bio}
+                    </p>
+                  )}
+                  <SocialLinks
+                    member={owner}
+                    className="mt-6 justify-center lg:justify-start"
+                  />
+                </div>
+              </div>
+            </div>
+          </RevealItem>
+        </Reveal>
+      )}
+
+      {/* --------------------------------------------------- the rest of us */}
+      {others.length > 0 && (
+        <>
           <Reveal>
-            <RevealItem>
-              <div className="mb-6 flex items-baseline gap-3">
-                <h2 className="text-display text-[clamp(1.4rem,3vw,1.9rem)] text-espresso">
-                  {section.label}
+            <RevealItem fade>
+              <div className="flex items-center gap-5">
+                <span className="h-px flex-1 bg-espresso/10" aria-hidden="true" />
+                <h2 className="whitespace-nowrap font-display text-2xl font-bold text-espresso">
+                  Meet the Team
                 </h2>
-                <span className="text-[11px] uppercase tracking-[0.16em] text-espresso/40">
-                  {section.members.length}
-                </span>
+                <span className="h-px flex-1 bg-espresso/10" aria-hidden="true" />
               </div>
             </RevealItem>
           </Reveal>
 
-          <Reveal stagger={0.08} className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-            {section.members.map((member) => (
+          <Reveal
+            stagger={0.08}
+            className="grid grid-cols-2 gap-x-6 gap-y-14 md:grid-cols-3 lg:grid-cols-4 lg:gap-y-16"
+          >
+            {others.map((member) => (
               <RevealItem key={member.id}>
-                <article className="group h-full overflow-hidden rounded-[2rem] bg-white shadow-soft transition-shadow hover:shadow-lift">
-                  <div className="relative aspect-[4/5] w-full overflow-hidden bg-cream-dark">
-                    {member.photo_url ? (
-                      <Image
-                        src={member.photo_url}
-                        alt={`${member.full_name} - ${member.job_title ?? ROLE_LABELS[member.role]}`}
-                        fill
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                        className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-sage">
-                        <span className="font-display text-[clamp(3rem,8vw,5rem)] font-black text-cream/90">
-                          {initials(member.full_name)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="absolute top-3 left-3">
-                      <StatusChip status={member.status} />
-                    </div>
-                  </div>
-
-                  <div className="p-5">
-                    <h3 className="font-display text-xl font-black text-espresso">
-                      {member.full_name}
-                    </h3>
-                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-terracotta">
-                      {member.job_title || ROLE_LABELS[member.role].replace(/s$/, "")}
-                    </p>
-                  </div>
-                </article>
+                <MemberCard member={member} />
               </RevealItem>
             ))}
           </Reveal>
-        </section>
-      ))}
+        </>
+      )}
     </div>
   );
 }
