@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { revalidateTaxonomy } from "@/lib/revalidate";
 import { categoryInput } from "../_shared";
 
@@ -48,6 +49,7 @@ export const PUT = withAuth(
 
     const { name, slug, image_url, image_alt } = body.data;
     const cleanSlug = slug.trim().toLowerCase();
+    const imageUrl = image_url?.trim() ? await resolveImageLink(image_url) : null;
 
     const clash = await query("SELECT id FROM categories WHERE slug = $1 AND id <> $2", [
       cleanSlug,
@@ -63,7 +65,7 @@ export const PUT = withAuth(
     const rows = await query(
       `UPDATE categories SET name = $1, slug = $2, image_url = $3, image_alt = $4
         WHERE id = $5 RETURNING id, name, slug, image_url, image_alt`,
-      [name.trim(), cleanSlug, image_url || null, image_alt || null, id],
+      [name.trim(), cleanSlug, imageUrl, image_alt || null, id],
     );
 
     await logAudit({

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import {
   MENU_IMAGES_PER_CATEGORY,
   countMenuImages,
@@ -83,7 +84,7 @@ export const POST = withAuth(
     if (problem) {
       return NextResponse.json({ error: problem }, { status: 400 });
     }
-    const normalized = normalizeImageUrl(linkCandidate);
+    const normalized = await resolveImageLink(linkCandidate);
     if (!normalized) {
       return NextResponse.json({ error: "Paste an image link." }, { status: 400 });
     }

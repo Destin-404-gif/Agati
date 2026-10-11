@@ -4,7 +4,8 @@ import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
 import { nextGallerySortOrder } from "@/lib/gallery";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { revalidateGallery } from "@/lib/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ export const POST = withAuth(
       return NextResponse.json({ error: problem }, { status: 400 });
     }
 
-    const url = normalizeImageUrl(linkCandidate);
+    const url = await resolveImageLink(linkCandidate);
     const thumbUrl = url;
 
     const sortOrder = await nextGallerySortOrder();

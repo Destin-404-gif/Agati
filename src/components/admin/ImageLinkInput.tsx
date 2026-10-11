@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Icon } from "./icons";
 import { Button, cx } from "./ui";
 import {
   MAX_IMAGE_URL_LENGTH,
   NOT_A_DIRECT_IMAGE,
   imageUrlProblem,
+  isPinterestLink,
   looksLikeDirectImage,
   normalizeImageUrl,
 } from "@/lib/image-link";
@@ -43,6 +44,8 @@ export function ImageLinkInput({
   previewClassName,
 }: ImageLinkInputProps) {
   const [loadFailed, setLoadFailed] = useState(false);
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const resolving = useRef(false);
 
   const normalized = normalizeImageUrl(value);
   const problem = imageUrlProblem(value);
@@ -53,11 +56,39 @@ export function ImageLinkInput({
   if (prevValue !== value) {
     setPrevValue(value);
     setLoadFailed(false);
+    setPreviewSrc(null);
   }
 
-  const showImage = Boolean(normalized) && !problem && !loadFailed;
+  const src = previewSrc || (problem ? "" : normalized);
+  const showImage = Boolean(src) && !loadFailed;
   const direct = looksLikeDirectImage(value);
   const message = problem ?? (loadFailed ? NOT_A_DIRECT_IMAGE : null);
+
+  // A pasted page (Pinterest) does not render in an <img>. When the preview
+  // fails and the link looks like a page host, ask the server for the direct
+  // image address and preview that instead.
+  function previewOnError() {
+    if (loadFailed || resolving.current) return;
+    setLoadFailed(true);
+    if (!isPinterestLink(value)) return;
+    void (async () => {
+      resolving.current = true;
+      try {
+        const res = await fetch(
+          `/api/admin/resolve-image?link=${encodeURIComponent(value)}`,
+        );
+        const data = (await res.json()) as { url?: string };
+        if (data?.url && data.url !== normalized) {
+          setPreviewSrc(data.url);
+          setLoadFailed(false);
+        }
+      } catch {
+        // A failed resolution never blocks editing - the link is kept as-is.
+      } finally {
+        resolving.current = false;
+      }
+    })();
+  }
 
   return (
     <div className="space-y-2">
@@ -77,11 +108,11 @@ export function ImageLinkInput({
           {showImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={normalized}
+              src={src}
               alt="Preview"
               referrerPolicy="no-referrer"
               className="h-full w-full object-cover"
-              onError={() => setLoadFailed(true)}
+              onError={previewOnError}
             />
           ) : (
             <Icon name="image" className="h-6 w-6 text-fg-faint" />
@@ -96,6 +127,7 @@ export function ImageLinkInput({
             maxLength={MAX_IMAGE_URL_LENGTH}
             onChange={(event) => {
               setLoadFailed(false);
+              setPreviewSrc(null);
               onChange(normalizeImageUrl(event.target.value));
             }}
             placeholder="Paste image link (https://...)"

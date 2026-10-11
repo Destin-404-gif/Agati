@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { resolveImageLink } from "@/lib/image-resolve";
 import {
   contentColumns,
   contentInput,
@@ -36,6 +37,14 @@ export const PUT = withAuth(
       return NextResponse.json(
         { error: "The body type does not match the route." },
         { status: 400 },
+      );
+    }
+
+    // A banner's image may be a page link (Pinterest, social…) - resolve it to
+    // a direct image before it is written, so the storefront's <img> renders.
+    if (parsed.data.type === "banners" && parsed.data.body.image_url?.trim()) {
+      parsed.data.body.image_url = await resolveImageLink(
+        parsed.data.body.image_url,
       );
     }
 

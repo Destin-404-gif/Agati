@@ -3,7 +3,8 @@ import { z } from "zod";
 import { readJson, withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { ensureMediaSlot } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
@@ -122,7 +123,7 @@ export const PATCH = withAuth(
       if (problem) {
         return NextResponse.json({ error: problem }, { status: 400 });
       }
-      const normalized = normalizeImageUrl(url);
+      const normalized = await resolveImageLink(url);
 
       const file = await query<{
         url: string;

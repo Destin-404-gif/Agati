@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { revalidateGallery } from "@/lib/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,7 @@ export const PATCH = withAuth<{ id: string }>(
         if (problem) {
           return NextResponse.json({ error: problem }, { status: 400 });
         }
-        const normalized = normalizeImageUrl(raw);
+        const normalized = await resolveImageLink(raw);
         if (normalized !== row.image_url) {
           imageUrl = normalized;
           clearVariants = true;

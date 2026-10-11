@@ -6,37 +6,23 @@
  * the string. This module is deliberately free of `node:` imports, `pg` and
  * sharp so the same checks run in the browser (live preview) and on the server
  * (before a value is written).
+ *
+ * Validation is intentionally permissive: any https address is accepted, because
+ * an admin's photo can live on any host (WhatsApp, email attachment stores,
+ * a Facebook page, a Pinterest pin…). Whether a link really displays as a
+ * picture is decided by the live preview's `onerror`, and links that point at a
+ * *page* (Pinterest) are rewritten to a direct image at save time by
+ * `src/lib/image-resolve.ts`.
  */
 
 /** Longest link we will store, matching the widest image column. */
 export const MAX_IMAGE_URL_LENGTH = 2000;
 
-/** The exact message the live preview shows when a URL does not resolve to a picture. */
+/** The message the live preview shows when a URL did not resolve to a picture. */
 export const NOT_A_DIRECT_IMAGE =
-  "This link is not a direct image. Use a link ending in .jpg, .png or .webp";
+  "That link did not load a picture. It is kept as-is - check the address, or paste a direct image link (ending .jpg, .png or .webp).";
 
 const IMAGE_EXTENSION = /\.(?:jpe?g|png|webp|gif|avif|svg|bmp|tiff?)(?:[?#].*)?$/i;
-const NON_IMAGE_EXTENSION =
-  /\.(?:pdf|html?|zip|rar|7z|mp4|mov|avi|mkv|webm|mp3|wav|ogg|docx?|xlsx?|pptx?|txt|csv|json|xml)(?:[?#].*)?$/i;
-
-/**
- * Hosts that serve *pages*, never a raw image. A link to one of these has to be
- * replaced by the direct image address (or a Google Drive file id, which we can
- * rewrite).
- */
-const PAGE_HOSTS = new Set([
-  "drive.google.com",
-  "docs.google.com",
-  "instagram.com",
-  "www.instagram.com",
-  "facebook.com",
-  "www.facebook.com",
-  "web.whatsapp.com",
-  "wa.me",
-  "api.whatsapp.com",
-  "whatsapp.com",
-  "www.whatsapp.com",
-]);
 
 export function isExternalImageUrl(url: string | null | undefined): boolean {
   return /^https?:\/\//i.test((url ?? "").trim());
@@ -82,12 +68,30 @@ export function normalizeImageUrl(raw: string | null | undefined): string {
 }
 
 /**
+ * True when the value looks like a Pinterest pin/profile URL. These are *pages*,
+ * not images, so the save path rewrites them to the pin's direct image via
+ * `src/lib/image-resolve.ts`. Kept here (pure, no network) so the browser
+ * preview can decide when resolution is worth trying.
+ */
+export function isPinterestLink(raw: string | null | undefined): boolean {
+  const value = (raw ?? "").trim();
+  if (!value) return false;
+  let host: string;
+  try {
+    host = new URL(value).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return host === "pin.it" || /(^|\.)pinterest\./i.test(host);
+}
+
+/**
  * The problem with a link, or null when it is acceptable.
  *
  * A site-relative path (`/images/...`) is allowed so existing assets keep
- * working; everything else must be an absolute https URL, must not be a page
- * host, and must not point at a file we can tell is not an image. Whether the
- * URL truly renders as an image is confirmed by the live preview (`onerror`).
+ * working; anything else must be an absolute https URL. No host or extension is
+ * rejected - a page address is stored as-is when it cannot be resolved, and the
+ * live preview confirms whether it actually renders.
  */
 export function imageUrlProblem(raw: string | null | undefined): string | null {
   const value = (raw ?? "").trim();
@@ -117,15 +121,6 @@ export function imageUrlProblem(raw: string | null | undefined): string | null {
   }
   if (url.protocol !== "https:") {
     return "Only https:// image links can be used.";
-  }
-
-  const host = url.hostname.toLowerCase();
-  if (PAGE_HOSTS.has(host) && !googleDriveDirect(value)) {
-    return "Google Drive, Instagram and WhatsApp page links are not direct images. Open the image, copy the direct image address, or use a link ending in .jpg, .png or .webp.";
-  }
-
-  if (NON_IMAGE_EXTENSION.test(url.pathname)) {
-    return NOT_A_DIRECT_IMAGE;
   }
 
   return null;

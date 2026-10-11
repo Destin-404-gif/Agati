@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { linkUrlProblem, normalizeCaption, normalizeLinkUrl } from "@/lib/menu-images";
 import { revalidateMenuImages } from "@/lib/revalidate";
 
@@ -88,7 +89,7 @@ export const PATCH = withAuth<{ id: string }>(
         if (problem) {
           return NextResponse.json({ error: problem }, { status: 400 });
         }
-        imagePath = normalizeImageUrl(raw);
+        imagePath = await resolveImageLink(raw);
       }
     }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { revalidateTaxonomy } from "@/lib/revalidate";
 import { subcategoryInput } from "../categories/_shared";
 
@@ -71,6 +72,7 @@ export const POST = withAuth(
     }
 
     const { categoryId, name, slug, image_url, image_alt, position } = parsed.data;
+    const imageUrl = image_url?.trim() ? await resolveImageLink(image_url) : null;
 
     const parent = await query<{ id: number }>(
       "SELECT id FROM categories WHERE id = $1",
@@ -100,7 +102,7 @@ export const POST = withAuth(
          (category_id, name, slug, image_url, image_alt, position)
        VALUES ($1,$2,$3,$4,$5,$6)
        RETURNING id, category_id, name, slug, image_url, image_alt, position`,
-      [categoryId, name.trim(), cleanSlug, image_url || null, image_alt || null, position],
+      [categoryId, name.trim(), cleanSlug, imageUrl, image_alt || null, position],
     );
 
     await logAudit({

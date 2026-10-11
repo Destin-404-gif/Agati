@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
+import { imageUrlProblem } from "@/lib/image-link";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { getTeamMember } from "@/lib/team";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export const POST = withAuth<{ id: string }>(
     if (problem) {
       return NextResponse.json({ error: problem }, { status: 400 });
     }
-    const photoUrl = normalizeImageUrl(candidate);
+    const photoUrl = await resolveImageLink(candidate);
 
     const updated = await query<{ id: number; photo_url: string | null }>(
       `UPDATE team_members SET photo_url = $2

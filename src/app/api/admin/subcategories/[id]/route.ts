@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { revalidateTaxonomy } from "@/lib/revalidate";
 import { subcategoryInput } from "../../categories/_shared";
 
@@ -52,7 +53,7 @@ export const PUT = withAuth<{ id: string }>(
     }
 
     const previousUrl = existing[0].image_url;
-    const nextUrl = image_url || null;
+    const nextUrl = image_url?.trim() ? await resolveImageLink(image_url) : null;
 
     const rows = await query(
       `UPDATE subcategories

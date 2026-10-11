@@ -3,6 +3,7 @@ import { z } from "zod";
 import { csvResponse, toCsv, withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { resolveImageLink } from "@/lib/image-resolve";
 import { listCategories, parseListParams } from "@/lib/admin-list";
 import { categoryInput, toCategoryCsv } from "./_shared";
 
@@ -37,6 +38,7 @@ export const POST = withAuth(
 
     const { name, slug, image_url, image_alt } = parsed.data;
     const cleanSlug = slug.trim().toLowerCase();
+    const imageUrl = image_url?.trim() ? await resolveImageLink(image_url) : null;
 
     const clash = await query("SELECT id FROM categories WHERE slug = $1", [cleanSlug]);
     if (clash.length > 0) {
@@ -49,7 +51,7 @@ export const POST = withAuth(
     const rows = await query(
       `INSERT INTO categories (name, slug, image_url, image_alt)
        VALUES ($1,$2,$3,$4) RETURNING id, name, slug, image_url, image_alt`,
-      [name.trim(), cleanSlug, image_url || null, image_alt || null],
+      [name.trim(), cleanSlug, imageUrl, image_alt || null],
     );
 
     await logAudit({
