@@ -40,12 +40,15 @@ export async function getAllGalleryItems(): Promise<GalleryItem[]> {
   );
 }
 
-/** What the public page shows. */
+/** What the public page shows. Rows whose picture is missing are skipped, so a
+ *  broken local path (a file that died with a redeploy) merely drops the photo
+ *  from the mosaic - the row stays for the admin to refill. */
 export async function getPublishedGalleryItems(): Promise<GalleryItem[]> {
   return query<GalleryItem>(
     `SELECT ${COLUMNS}
        FROM gallery_items
       WHERE is_published = TRUE
+        AND image_url IS NOT NULL AND TRIM(image_url) <> ''
       ORDER BY sort_order ASC, id ASC`,
   );
 }

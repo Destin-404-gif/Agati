@@ -71,9 +71,9 @@ export const productSchema = z.object({
   status: z.enum(PRODUCT_STATUSES).default("active"),
   isNew: z.boolean().default(false),
   isFeatured: z.boolean().default(false),
-  imageUrl: z.string().trim().max(500).optional().or(z.literal("")),
+  imageUrl: z.string().trim().max(2000).optional().or(z.literal("")),
   images: z
-    .array(z.object({ url: z.string().trim().min(1).max(500) }))
+    .array(z.object({ url: z.string().trim().min(1).max(2000) }))
     .max(12, "Up to 12 images per product.")
     .default([]),
 });
@@ -129,7 +129,7 @@ export const staffSchema = z.object({
 export const bannerSchema = z.object({
   title: z.string().trim().min(1, "Give the banner a title.").max(150),
   subtitle: optionalText,
-  imageUrl: z.string().trim().max(500).optional().or(z.literal("")),
+  imageUrl: z.string().trim().max(2000).optional().or(z.literal("")),
   linkUrl: z.string().trim().max(500).optional().or(z.literal("")),
   position: z.coerce.number().int().min(0).max(9999).default(0),
   isActive: z.boolean().default(true),

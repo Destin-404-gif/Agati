@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { removeStoredFiles } from "@/lib/media-upload";
 import { revalidateTaxonomy } from "@/lib/revalidate";
 import { categoryInput } from "../_shared";
 
@@ -95,9 +94,6 @@ export const DELETE = withAuth(
 
     /* Products keep existing with category_id set to NULL, so this is safe. */
     const rows = await query("DELETE FROM categories WHERE id = $1 RETURNING id", [id]);
-
-    // The picture belonged to the row that just went; drop its bytes too.
-    await removeStoredFiles([(existing[0] as { image_url?: string | null }).image_url ?? null]);
 
     revalidateTaxonomy();
 

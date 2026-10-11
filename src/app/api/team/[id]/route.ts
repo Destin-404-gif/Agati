@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { withAuth, readJson } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { removeStoredFiles } from "@/lib/media-upload";
 import {
   getTeamMember,
   ownerExists,
@@ -74,8 +73,7 @@ export const PUT = withAuth<{ id: string }>(
 );
 
 /**
- * Remove a member and the photo bytes they owned. The owner is protected -
- * the business always has exactly one.
+ * Remove a member. The owner is protected - the business always has exactly one.
  */
 export const DELETE = withAuth<{ id: string }>(
   async ({ params, staff }) => {
@@ -97,7 +95,6 @@ export const DELETE = withAuth<{ id: string }>(
     }
 
     await query("DELETE FROM team_members WHERE id = $1", [id]);
-    if (before.photo_url) await removeStoredFiles([before.photo_url]);
 
     await logAudit({
       action: "delete",

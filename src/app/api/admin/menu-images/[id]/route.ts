@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { removeStoredFiles } from "@/lib/media-upload";
+import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
 import { linkUrlProblem, normalizeCaption, normalizeLinkUrl } from "@/lib/menu-images";
 import { revalidateMenuImages } from "@/lib/revalidate";
 
@@ -12,13 +12,10 @@ export const dynamic = "force-dynamic";
  * Edit or delete one menu image.
  *
  * `PATCH` merges whichever fields were sent over the row that is already there,
- * so saving a caption does not have to resend the link, and vice versa. The file
- * is never touched here - replacing a picture means uploading a new one, which
- * orphans the old file; that is handled by `DELETE` on the old row.
+ * so saving a caption does not have to resend the link, and vice versa.
  *
- * `DELETE` removes the row *and* the file on disk, because a menu image owns its
- * picture. Leaving the bytes behind would quietly fill `storage/uploads` with
- * images nothing points at.
+ * `DELETE` removes the row; the picture itself lives on whatever host the link
+ * points at, so there are no local bytes to clean up.
  */
 
 const MENU_IMAGE_PERMISSIONS = ["media.edit", "products.edit"];
@@ -58,6 +55,7 @@ export const PATCH = withAuth<{ id: string }>(
     const body = (await req.json().catch(() => ({}))) as {
       caption?: unknown;
       linkUrl?: unknown;
+      imagePath?: unknown;
     };
 
     // Only keys actually present in the request are applied.
@@ -80,11 +78,25 @@ export const PATCH = withAuth<{ id: string }>(
       linkUrl = normalizeLinkUrl(raw);
     }
 
+    // Replace the picture itself when a new image URL was sent. This is how a
+    // link (instead of a device upload) changes an existing menu picture.
+    let imagePath = row.image_path;
+    if (body.imagePath !== undefined) {
+      const raw = body.imagePath === null ? "" : String(body.imagePath);
+      if (raw.trim()) {
+        const problem = imageUrlProblem(raw);
+        if (problem) {
+          return NextResponse.json({ error: problem }, { status: 400 });
+        }
+        imagePath = normalizeImageUrl(raw);
+      }
+    }
+
     const rows = await query<MenuImageRow>(
-      `UPDATE menu_images SET caption = $2, link_url = $3
+      `UPDATE menu_images SET caption = $2, link_url = $3, image_path = $4
         WHERE id = $1
         RETURNING ${ROW_COLUMNS}`,
-      [id, caption, linkUrl],
+      [id, caption, linkUrl, imagePath],
     );
 
     await logAudit({
@@ -118,8 +130,6 @@ export const DELETE = withAuth<{ id: string }>(
       return NextResponse.json({ error: "Unknown menu image." }, { status: 404 });
     }
     const row = rows[0];
-
-    await removeStoredFiles([row.image_path]);
 
     // Close the gap the deleted row left, so the remaining pictures keep their
     // 0,1,2 order and a later reorder only ever swaps neighbours.

@@ -10,8 +10,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+import { ImageLinkInput } from "./ImageLinkInput";
 import { Button, cx } from "./ui";
-import { uploadWithProgress } from "./ImageUploader";
 
 /* ------------------------------------------------------------------ modal */
 
@@ -399,148 +399,24 @@ export interface UploadedImage {
 }
 
 /**
- * Uploads to `storage/uploads` through the upload endpoint and previews the result.
- * Falls back to a pasted URL when a file is chosen directly.
+ * Backwards-compatible name for the shared {@link ImageLinkInput}.
+ *
+ * It is kept as `ImageField` so every existing call site (products, categories,
+ * banners, media, navigation) gains the link field and live preview without a
+ * mechanical rename.
  */
 export function ImageField({
   value,
   onChange,
   label = "Image",
-  hint = "PNG, JPEG or WebP up to 5MB.",
-  allowSvg = false,
+  hint,
 }: {
   value: string;
   onChange: (url: string) => void;
   label?: string;
   hint?: string;
-  /** Logos and favicons accept SVG; product and banner photos do not. */
-  allowSvg?: boolean;
 }) {
-  const [preview, setPreview] = useState(value);
-  useEffect(() => {
-    if (value !== preview) {
-      setPreview(value);
-    }
-  }, [value, preview]);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const objectUrl = useRef<string | null>(null);
-
-  useEffect(
-    () => () => {
-      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-    },
-  );
-
-  // The parent owns the URL, so adopt its value when it changes (after an
-  // upload, or when switching products). Adjusted during render, not in an
-  // effect, so the preview never flashes the previous image.
-
-
-  async function onFile(file: File) {
-    setError(null);
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError("That file is larger than 5MB.");
-      return;
-    }
-
-    if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-    objectUrl.current = URL.createObjectURL(file);
-    setPreview(objectUrl.current);
-    setUploading(true);
-    setProgress(0);
-
-    try {
-      const data = await uploadWithProgress(file, "/api/admin/uploads", {
-        onProgress: setProgress,
-      });
-      const url = data.url;
-      if (!url) throw new Error("Upload failed: the server did not return a URL.");
-
-      if (objectUrl.current) URL.revokeObjectURL(objectUrl.current);
-      objectUrl.current = null;
-      setPreview(url);
-      onChange(url);
-    } catch (err) {
-      // A dropped session is the most likely cause and the message the admin
-      // sees should say so, otherwise "fetch failed" looks like a broken server.
-      const message =
-        err instanceof TypeError
-          ? "Could not reach the server. Check your connection and that your session has not expired, then try again."
-          : err instanceof Error
-            ? err.message
-            : "Upload failed.";
-      setError(message);
-    } finally {
-      setUploading(false);
-    }
-  }
-
   return (
-    <div className="space-y-2">
-      <span className="block text-xs font-semibold tracking-wide text-fg uppercase">
-        {label}
-      </span>
-
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-outline bg-field">
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={preview}
-              alt="Preview"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <Icon name="image" className="h-6 w-6 text-fg-faint" />
-          )}
-          {uploading && (
-            <div className="absolute inset-x-2 bottom-2 h-1.5 overflow-hidden rounded-full bg-bg/80" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Image upload progress">
-              <div className="h-full bg-terracotta transition-[width]" style={{ width: `${progress}%` }} />
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0 flex-1 space-y-2">
-          <input
-            ref={inputRef}
-            type="file"
-            accept={
-              allowSvg
-                ? "image/png,image/jpeg,image/webp,image/svg+xml"
-                : "image/png,image/jpeg,image/webp"
-            }
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void onFile(file);
-              e.target.value = "";
-            }}
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            loading={uploading}
-            onClick={() => inputRef.current?.click()}
-          >
-            Choose file
-          </Button>
-
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="/images/example.jpg"
-            className="w-full rounded-xl border border-outline bg-field px-3 py-2 text-xs text-fg placeholder:text-fg-faint focus-visible:border-outline-strong focus-visible:outline-none"
-          />
-          <p className="text-xs text-fg-muted">{hint}</p>
-          {error && <p className="text-xs font-medium text-terracotta">{error}</p>}
-        </div>
-      </div>
-    </div>
+    <ImageLinkInput value={value} onChange={onChange} label={label} hint={hint} />
   );
 }

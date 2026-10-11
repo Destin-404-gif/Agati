@@ -18,8 +18,8 @@ export const dynamic = "force-dynamic";
 
 const patchSchema = z.object({
   slotKey: z.string().trim().min(1).max(80),
-  /** A url from `media_uploads`, or null to clear the slot. */
-  url: z.string().trim().max(500).nullable(),
+  /** A url from `media_uploads`, a pasted link, or null to clear the slot. */
+  url: z.string().trim().max(2000).nullable(),
   altText: z.string().trim().max(300).optional(),
 });
 
@@ -113,6 +113,16 @@ export const PATCH = withAuth(
         [slotKey, staff.email],
       );
     } else {
+      // A pasted https link is saved as-is; Drive share links are rewritten to
+      // their direct form first. No file is written to disk, so the slot
+      // survives a redeploy. A URL that is already in the library keeps its
+      // variant family; a link does not have one.
+      const problem = imageUrlProblem(url);
+      if (problem) {
+        return NextResponse.json({ error: problem }, { status: 400 });
+      }
+      const normalized = normalizeImageUrl(url);
+
       const file = await query<{
         url: string;
         thumb_url: string | null;
@@ -130,42 +140,50 @@ export const PATCH = withAuth(
                 variant_400_url, variant_1200_url, variant_2560_url, variant_3840_url,
                 original_width, original_height
            FROM media_uploads WHERE url = $1`,
-        [url],
+        [normalized],
       );
       const asset = file[0];
-      if (!asset) {
-        return NextResponse.json(
-          { error: "That image is not in the media library." },
-          { status: 400 },
+
+      if (asset) {
+        await query(
+          `UPDATE media_slots
+              SET image_url = $2, thumb_url = $3, width = $4, height = $5, bytes = $6,
+                  variant_400_url = $9, variant_1200_url = $10,
+                  variant_2560_url = $11, variant_3840_url = $12,
+                  original_width = $13, original_height = $14,
+                  alt_text = COALESCE($7, alt_text),
+                  updated_at = NOW(), updated_by = $8
+            WHERE slot_key = $1`,
+          [
+            slotKey,
+            asset.url,
+            asset.thumb_url,
+            asset.width,
+            asset.height,
+            asset.bytes,
+            altText ?? null,
+            staff.email,
+            asset.variant_400_url,
+            asset.variant_1200_url,
+            asset.variant_2560_url,
+            asset.variant_3840_url,
+            asset.original_width,
+            asset.original_height,
+          ],
+        );
+      } else {
+        await query(
+          `UPDATE media_slots
+              SET image_url = $2, thumb_url = $2, width = NULL, height = NULL, bytes = NULL,
+                  variant_400_url = NULL, variant_1200_url = NULL,
+                  variant_2560_url = NULL, variant_3840_url = NULL,
+                  original_width = NULL, original_height = NULL,
+                  alt_text = COALESCE($3, alt_text),
+                  updated_at = NOW(), updated_by = $4
+            WHERE slot_key = $1`,
+          [slotKey, normalized, altText ?? null, staff.email],
         );
       }
-
-      await query(
-        `UPDATE media_slots
-            SET image_url = $2, thumb_url = $3, width = $4, height = $5, bytes = $6,
-                variant_400_url = $9, variant_1200_url = $10,
-                variant_2560_url = $11, variant_3840_url = $12,
-                original_width = $13, original_height = $14,
-                alt_text = COALESCE($7, alt_text),
-                updated_at = NOW(), updated_by = $8
-          WHERE slot_key = $1`,
-        [
-          slotKey,
-          asset.url,
-          asset.thumb_url,
-          asset.width,
-          asset.height,
-          asset.bytes,
-          altText ?? null,
-          staff.email,
-          asset.variant_400_url,
-          asset.variant_1200_url,
-          asset.variant_2560_url,
-          asset.variant_3840_url,
-          asset.original_width,
-          asset.original_height,
-        ],
-      );
     }
 
     const after = await query<{

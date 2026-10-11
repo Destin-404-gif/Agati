@@ -1,13 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import { useState } from "react";
+import { ImageLinkInput } from "./ImageLinkInput";
 import { Icon } from "./icons";
-import {
-  localFileProblem,
-  uploadWithProgress,
-  ACCEPTED_IMAGE_TYPES,
-} from "./ImageUploader";
 import { Modal, submitFormById, useConfirmState } from "./overlays";
 import { useToast } from "./Toast";
 import {
@@ -25,11 +21,9 @@ import {
 /**
  * Admin > Gallery.
  *
- * Drop a batch of photographs and each one is uploaded in turn with its own
- * progress bar; the grid then edits title, caption, alt text, order, published
- * state, and deletes. Every image goes through the same server handler as the
- * rest of the admin (`/api/admin/gallery` → `storeUpload`), so validation,
- * re-encoding, thumbnails and safe filenames are shared, not re-implemented.
+ * Add a photograph by pasting its image link; the grid then edits title, caption,
+ * alt text, order, published state, and deletes. The picture is stored as a URL
+ * string, so it survives a redeploy with no local file at all.
  */
 
 export interface GalleryItemRow {
@@ -44,32 +38,16 @@ export interface GalleryItemRow {
   created_at: string;
 }
 
-interface QueueEntry {
-  key: string;
-  name: string;
-  percent: number;
-  done: boolean;
-  error: string | null;
-}
-
-let seq = 0;
-
 export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[] }) {
   const toast = useToast();
   const { dialog, confirmDialog } = useConfirmState();
 
   const [items, setItems] = useState(initialItems);
-  const [queue, setQueue] = useState<QueueEntry[]>([]);
-  const [dragging, setDragging] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<GalleryItemRow | null>(null);
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  // Uploads are serialised: sharp is CPU-bound, and ten parallel re-encodes
-  // would stall the admin UI and the storefront behind it.
-  const uploading = useRef(false);
+  const [linkValue, setLinkValue] = useState("");
 
   async function refresh() {
     const res = await fetch("/api/admin/gallery", { cache: "no-store" });
@@ -145,15 +123,9 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
       // permanently pushed down by a stale list.
       window.setTimeout(() => setQueue([]), 2500);
       await refresh();
-    },
-    [toast],
-  );
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragging(false);
-    const files = Array.from(event.dataTransfer.files ?? []).filter(Boolean);
-    void handleFiles(files);
+    } catch {
+      setError("Could not add that link. Check your connection and retry.");
+    }
   }
 
   /** Publish or hide one photo without opening the editor. */
@@ -247,6 +219,9 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
         altText: draft.alt_text,
         isPublished: draft.is_published,
         sortOrder: draft.sort_order,
+        ...(draft.image_url !== (editing?.image_url ?? draft.image_url)
+          ? { imageUrl: draft.image_url }
+          : {}),
       }),
     });
     const data = (await res.json().catch(() => ({}))) as GalleryItemRow & {
@@ -265,81 +240,32 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
     <>
       {error && <Alert tone="error">{error}</Alert>}
 
-      {/* ------------------------------------------------ drop zone + queue */}
+      {/* --------------------------------------------------- add by link */}
       <Card>
-        <div
-          onDragOver={(event) => {
-            event.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-          className={cx(
-            "flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors",
-            dragging ? "border-accent bg-accent/5" : "border-outline",
-          )}
-        >
-          <Icon name="image" className="h-7 w-7 text-fg-faint" />
-          <div>
-            <p className="font-display text-base font-semibold">
-              Drop photographs here
-            </p>
-            <p className="mt-0.5 text-sm text-fg-soft">
-              JPG, PNG or WebP, up to 5MB each · {items.length}{" "}
-              {items.length === 1 ? "photo" : "photos"} in the gallery
-            </p>
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_IMAGE_TYPES}
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              event.target.value = "";
-              void handleFiles(files);
-            }}
+        <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-start">
+          <ImageLinkInput
+            value={linkValue}
+            onChange={setLinkValue}
+            label="Add a photo"
           />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => inputRef.current?.click()}
-          >
-            <Icon name="plus" className="h-3.5 w-3.5" filled />
-            Add photos
-          </Button>
+          <div className="space-y-3 md:pt-6">
+            <p className="text-sm text-fg-soft">
+              Paste the link to a picture hosted anywhere (https://…).
+              {" "}
+              {items.length === 0
+                ? "The first one publishes to the storefront gallery straight away."
+                : `${items.length} ${items.length === 1 ? "photo" : "photos"} in the gallery.`}
+            </p>
+            <Button
+              type="button"
+              disabled={!linkValue.trim()}
+              onClick={() => void addByLink()}
+            >
+              <Icon name="plus" className="h-3.5 w-3.5" filled />
+              Add photo
+            </Button>
+          </div>
         </div>
-
-        {queue.length > 0 && (
-          <ul className="mt-4 space-y-2.5">
-            {queue.map((entry) => (
-              <li key={entry.key} className="space-y-1">
-                <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="truncate text-fg-soft">{entry.name}</span>
-                  <span
-                    className={cx(
-                      "shrink-0 tabular-nums",
-                      entry.error ? "font-medium text-terracotta" : "text-fg-muted",
-                    )}
-                  >
-                    {entry.error ?? (entry.done ? "Done" : `${entry.percent}%`)}
-                  </span>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-fill">
-                  <div
-                    className={cx(
-                      "h-full rounded-full transition-[width] duration-200",
-                      entry.error ? "bg-terracotta" : "bg-sage",
-                    )}
-                    style={{ width: `${entry.error ? 100 : entry.percent}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
       </Card>
 
       {/* ------------------------------------------------------------- grid */}
@@ -347,7 +273,7 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
         <Card padded={false}>
           <EmptyState
             title="No photos yet"
-            description="The first upload publishes to the storefront gallery straight away. Captions, order and visibility are edited from this grid afterwards."
+            description="Paste an image link above to add the first picture. Captions, order and visibility are edited from this grid afterwards."
           />
         </Card>
       ) : (
@@ -356,14 +282,21 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
             <li key={item.id}>
               <Card padded={false} className="overflow-hidden">
                 <div className="relative aspect-4/3 bg-surface-soft">
-                  <Image
-                    src={item.thumbnail_url ?? item.image_url}
-                    alt={item.alt_text ?? ""}
-                    fill
-                    sizes="(max-width: 640px) 90vw, (max-width: 1280px) 45vw, 30vw"
-                    className="object-cover"
-                    unoptimized
-                  />
+                  {item.thumbnail_url ?? item.image_url ? (
+                    <Image
+                      src={(item.thumbnail_url ?? item.image_url) as string}
+                      alt={item.alt_text ?? ""}
+                      fill
+                      sizes="(max-width: 640px) 90vw, (max-width: 1280px) 45vw, 30vw"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="flex h-full flex-col items-center justify-center gap-1 text-fg-faint">
+                      <Icon name="image" className="h-6 w-6" />
+                      <span className="text-xs font-medium">Image missing</span>
+                    </span>
+                  )}
                   {!item.is_published && (
                     <span className="absolute top-2 left-2 rounded-full bg-espresso/80 px-2.5 py-0.5 text-xs font-semibold text-cream">
                       Hidden
@@ -499,7 +432,8 @@ function EditDialog({
     draft.caption !== item.caption ||
     draft.alt_text !== item.alt_text ||
     draft.is_published !== item.is_published ||
-    draft.sort_order !== item.sort_order;
+    draft.sort_order !== item.sort_order ||
+    draft.image_url !== item.image_url;
 
   return (
     <Modal
@@ -540,15 +474,29 @@ function EditDialog({
         className="space-y-4"
       >
         <div className="relative aspect-16/10 overflow-hidden rounded-xl border border-outline bg-surface-soft">
-          <Image
-            src={draft.thumbnail_url ?? draft.image_url}
-            alt=""
-            fill
-            sizes="(max-width: 640px) 90vw, 32rem"
-            className="object-cover"
-            unoptimized
-          />
+          {draft.thumbnail_url ?? draft.image_url ? (
+            <Image
+              src={(draft.thumbnail_url ?? draft.image_url) as string}
+              alt=""
+              fill
+              sizes="(max-width: 640px) 90vw, 32rem"
+              className="object-cover"
+              unoptimized
+            />
+          ) : (
+            <span className="flex h-full flex-col items-center justify-center gap-1 text-fg-faint">
+              <Icon name="image" className="h-6 w-6" />
+              <span className="text-xs font-medium">Image missing — paste a link</span>
+            </span>
+          )}
         </div>
+
+        <ImageLinkInput
+          label="Image link"
+          hint="Paste a link to swap the photo. Leave the current one to keep it."
+          value={draft.image_url}
+          onChange={(url) => setDraft({ ...draft, image_url: url })}
+        />
 
         <Field label="Title" htmlFor="gallery-title">
           <Input

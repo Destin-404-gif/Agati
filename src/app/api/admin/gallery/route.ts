@@ -4,7 +4,7 @@ import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
 import { nextGallerySortOrder } from "@/lib/gallery";
-import { removeStoredFiles, storeUpload } from "@/lib/media-upload";
+import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
 import { revalidateGallery } from "@/lib/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +13,8 @@ export const dynamic = "force-dynamic";
  * The workshop gallery.
  *
  * `GET` lists every item for the admin grid (published or not). `POST` takes a
- * multipart upload with optional title/caption/alt, runs it through the shared
- * `storeUpload` handler and inserts the row, so one request both stores the
- * file and creates the record the grid renders.
+ * pasted https image link and inserts the row, so one request both sets the
+ * picture and creates the record the grid renders.
  */
 
 const ReorderBody = z.object({
@@ -36,29 +35,22 @@ export const GET = withAuth(async () => {
 
 export const POST = withAuth(
   async ({ req, staff }) => {
-    const form = await req.formData().catch(() => null);
-    const file = form?.get("file");
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file was uploaded." }, { status: 400 });
-    }
-
-    // `null` slotKey means "a photo": jpg/png/webp only, 5MB, real signature.
-    const result = await storeUpload(file, null, staff.email);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
-    }
-
-    const text = (key: string, max: number): string | null => {
-      const raw = form?.get(key);
-      if (typeof raw !== "string") return null;
-      const value = raw.trim().slice(0, max);
-      return value === "" ? null : value;
+    const text = (value: unknown, max: number): string | null => {
+      if (typeof value !== "string") return null;
+      const trimmed = value.trim().slice(0, max);
+      return trimmed === "" ? null : trimmed;
     };
 
-    // Falls back to the file's own name so a freshly dropped grid of photos is
-    // labelled with something recognisable instead of being all blanks.
-    const fallbackTitle = result.upload.originalName.replace(/\.[^.]+$/, "").slice(0, 150);
+    const linkCandidate = typeof body.url === "string" ? body.url : "";
+    const problem = imageUrlProblem(linkCandidate);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
+    }
+
+    const url = normalizeImageUrl(linkCandidate);
+    const thumbUrl = url;
 
     const sortOrder = await nextGallerySortOrder();
 
@@ -68,25 +60,16 @@ export const POST = withAuth(
           variant_2560_url, variant_3840_url, image_width, image_height, image_bytes,
           original_width, original_height,
           title, caption, alt_text, sort_order, is_published)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE)
+       VALUES ($1,$2,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,$3,$4,$5,$6,TRUE)
        RETURNING id, image_url, thumbnail_url, variant_400_url, variant_1200_url,
                  variant_2560_url, variant_3840_url, image_width, image_height, image_bytes,
                  title, caption, alt_text, sort_order, is_published, created_at`,
       [
-        result.upload.url,
-        result.upload.thumbUrl,
-        result.upload.variant400Url,
-        result.upload.variant1200Url,
-        result.upload.variant2560Url,
-        result.upload.variant3840Url,
-        result.upload.width,
-        result.upload.height,
-        result.upload.bytes,
-        result.upload.originalWidth,
-        result.upload.originalHeight,
-        text("title", 150) ?? fallbackTitle,
-        text("caption", 2000),
-        text("alt", 300),
+        url,
+        thumbUrl,
+        text(body.title, 150),
+        text(body.caption, 2000),
+        text(body.alt, 300),
         sortOrder,
       ],
     );
@@ -95,7 +78,7 @@ export const POST = withAuth(
       action: "create",
       entity: "gallery_item",
       entityId: (rows[0] as { id: number }).id,
-      after: { url: result.upload.url, bytes: result.upload.bytes },
+      after: { url },
       staff: { id: staff.id, email: staff.email },
     });
 
@@ -105,8 +88,8 @@ export const POST = withAuth(
       {
         ok: true,
         id: (rows[0] as { id: number }).id,
-        url: result.upload.url,
-        thumbUrl: result.upload.thumbUrl,
+        url,
+        thumbUrl,
         item: rows[0],
       },
       { status: 201 },

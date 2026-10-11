@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ImageLinkInput } from "./ImageLinkInput";
 import { Icon } from "./icons";
 import { Modal, submitFormById, useConfirmState } from "./overlays";
 import { useToast } from "./Toast";
@@ -135,8 +136,6 @@ interface Draft {
   sort_order: string;
   is_active: boolean;
   photo_url: string | null;
-  pendingPhoto: File | null;
-  removingPhoto: boolean;
 }
 
 function emptyDraft(role: TeamRole): Draft {
@@ -151,8 +150,6 @@ function emptyDraft(role: TeamRole): Draft {
     sort_order: "0",
     is_active: true,
     photo_url: null,
-    pendingPhoto: null,
-    removingPhoto: false,
   };
 }
 
@@ -287,15 +284,17 @@ export function TeamManager() {
     if (!isEdit && data.id) createdId = data.id;
 
     try {
-      if (createdId && draft.pendingPhoto) {
-        const form = new FormData();
-        form.append("file", draft.pendingPhoto);
-        const up = await fetch(`/api/team/${createdId}/photo`, { method: "POST", body: form });
-        if (!up.ok) {
-          const ud = await fetchJson(up, "Saved, but the photo could not be uploaded.");
-          toast.error(ud.error ?? "Saved, but the photo could not be uploaded.");
+      if (createdId && !isEdit && draft.photo_url) {
+        const linkRes = await fetch(`/api/team/${createdId}/photo`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: draft.photo_url }),
+        });
+        if (!linkRes.ok) {
+          const ld = await fetchJson(linkRes, "Saved, but the photo link could not be saved.");
+          toast.error(ld.error ?? "Saved, but the photo link could not be saved.");
         } else {
-          toast.success(isEdit ? "Team member updated." : "Team member created.");
+          toast.success("Team member created.");
         }
       } else {
         toast.success(isEdit ? "Team member updated." : "Team member created.");
@@ -514,8 +513,6 @@ export function TeamManager() {
                                   sort_order: String(member.sort_order ?? 0),
                                   is_active: member.is_active,
                                   photo_url: member.photo_url,
-                                  pendingPhoto: null,
-                                  removingPhoto: false,
                                 })
                               }
                               className="cursor-pointer rounded-lg p-1.5 text-fg-soft transition-colors hover:bg-fill hover:text-fg"
@@ -577,42 +574,27 @@ function TeamDialog({
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [savingLink, setSavingLink] = useState(false);
+  const [photoLink, setPhotoLink] = useState(draft.photo_url ?? "");
   const isEdit = draft.id !== null;
   const isOwner = draft.role === "owner";
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     onChange({ ...draft, [key]: value });
 
-  async function uploadPhoto(file: File) {
-    if (!draft.id) {
-      set("pendingPhoto", file);
-      return;
-    }
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`/api/team/${draft.id}/photo`, { method: "POST", body: form });
-      const data = await fetchJson(res, "Could not upload that photo.");
-      if (!res.ok) {
-        toast.error(data.error ?? "Could not upload that photo.");
-        return;
-      }
-      set("photo_url", data.photo_url ?? null);
-      toast.success("Photo updated.");
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+  // Re-seed the editable link when the dialog switches to another member.
+  const [prevDraftId, setPrevDraftId] = useState(draft.id);
+  if (prevDraftId !== draft.id) {
+    setPrevDraftId(draft.id);
+    setPhotoLink(draft.photo_url ?? "");
   }
 
   async function removePhoto() {
     if (!draft.id) {
-      set("removingPhoto", true);
+      set("photo_url", null);
+      setPhotoLink("");
       return;
     }
-    setUploading(true);
+    setSavingLink(true);
     try {
       const res = await fetch(`/api/team/${draft.id}/photo`, { method: "DELETE" });
       if (!res.ok) {
@@ -621,21 +603,41 @@ function TeamDialog({
         return;
       }
       set("photo_url", null);
-      set("pendingPhoto", null);
+      setPhotoLink("");
       toast.success("Photo removed.");
     } finally {
-      setUploading(false);
+      setSavingLink(false);
+    }
+  }
+
+  async function setPhotoLinkValue(url: string) {
+    if (!draft.id) {
+      set("photo_url", url);
+      return;
+    }
+    setSavingLink(true);
+    try {
+      const res = await fetch(`/api/team/${draft.id}/photo`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await fetchJson(res, "Could not save that photo link.");
+      if (!res.ok) {
+        toast.error(data.error ?? "Could not save that photo link.");
+        return;
+      }
+      set("photo_url", data.photo_url ?? url);
+      setPhotoLink(data.photo_url ?? url);
+      toast.success("Photo updated.");
+    } finally {
+      setSavingLink(false);
     }
   }
 
   // When the existing owner is edited, the role must stay put: there can only
   // be one, and it can never be deleted.
   const roleLocked = draft.id !== null && hasOwner && isOwner;
-
-  const photoPreview = useMemo(
-    () => (draft.pendingPhoto ? URL.createObjectURL(draft.pendingPhoto) : null),
-    [draft.pendingPhoto],
-  );
 
   return (
     <Modal
@@ -645,14 +647,14 @@ function TeamDialog({
       size="md"
       footer={
         <>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={saving || uploading}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving || savingLink}>
             Cancel
           </Button>
           <Button
             type="button"
             onClick={() => submitFormById("team-form")}
             loading={saving}
-            disabled={uploading}
+            disabled={savingLink}
           >
             {saving ? "Saving…" : isEdit ? "Save changes" : "Add member"}
           </Button>
@@ -675,58 +677,40 @@ function TeamDialog({
         className="space-y-4"
       >
         {/* -------------------------------------------------------- photo */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-outline bg-field">
-            {draft.photo_url || photoPreview ? (
-              <img
-                src={photoPreview ?? draft.photo_url ?? ""}
-                alt="Member photo"
-                className="h-full w-full rounded-full object-cover"
-              />
-            ) : (
-              <Icon name="users" className="h-6 w-6 text-fg-faint" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void uploadPhoto(file);
-              }}
-            />
+        <div className="space-y-3">
+          <ImageLinkInput
+            label="Photo"
+            value={photoLink}
+            disabled={savingLink}
+            hint="Paste a link to the member's photo (https://…)."
+            onChange={(url) => {
+              setPhotoLink(url);
+              if (!draft.id) set("photo_url", url || null);
+            }}
+          />
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              loading={uploading}
-              onClick={() => fileRef.current?.click()}
+              loading={savingLink}
+              disabled={!photoLink.trim()}
+              onClick={() => {
+                const url = photoLink.trim();
+                if (url) void setPhotoLinkValue(url);
+              }}
             >
-              Choose photo
+              {draft.id ? "Save photo" : "Use link"}
             </Button>
-            <p className="text-xs text-fg-muted">
-              {isEdit
-                ? "PNG, JPEG or WebP. Saved in high quality."
-                : draft.pendingPhoto
-                  ? "Photo will be attached when the member is created."
-                  : "PNG, JPEG or WebP. You can add a photo right after creating."}
-            </p>
-            {(draft.photo_url || draft.pendingPhoto || draft.removingPhoto) &&
-              draft.id !== null && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    set("pendingPhoto", null);
-                    void removePhoto();
-                  }}
-                  className="cursor-pointer text-xs font-medium text-terracotta hover:underline"
-                >
-                  Remove photo
-                </button>
-              )}
+            {draft.photo_url && (
+              <button
+                type="button"
+                onClick={() => void removePhoto()}
+                className="cursor-pointer text-xs font-medium text-terracotta hover:underline"
+              >
+                Remove photo
+              </button>
+            )}
           </div>
         </div>
 

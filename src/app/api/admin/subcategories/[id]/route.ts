@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { removeStoredFiles } from "@/lib/media-upload";
 import { revalidateTaxonomy } from "@/lib/revalidate";
 import { subcategoryInput } from "../../categories/_shared";
 
@@ -72,11 +71,6 @@ export const PUT = withAuth<{ id: string }>(
       ],
     );
 
-    // Replacing the picture (or clearing it) orphans the old file.
-    if (previousUrl && previousUrl !== nextUrl) {
-      await removeStoredFiles([previousUrl]);
-    }
-
     await logAudit({
       action: "update",
       entity: "subcategory",
@@ -107,8 +101,6 @@ export const DELETE = withAuth<{ id: string }>(
     if (rows.length === 0) {
       return NextResponse.json({ error: "Unknown subcategory." }, { status: 404 });
     }
-
-    await removeStoredFiles([rows[0].image_url]);
 
     await logAudit({
       action: "delete",

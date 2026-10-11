@@ -1,26 +1,14 @@
 /**
  * Shared image-variant metadata.
  *
- * Plain data plus a few tiny helpers, safe to import from both the server upload
- * handler and the browser: no `node:` imports, no sharp, nothing that pulls `pg`
- * into the client bundle.
+ * Plain data plus a few tiny helpers, safe to import from both the server and the
+ * browser: no `node:` imports, no sharp, nothing that pulls `pg` into the client
+ * bundle.
  *
- * The upload pipeline writes one file per entry in `IMAGE_VARIANT_WIDTHS`, named
- * `<base>-w<actualWidth>.<ext>`, so a variant's pixel width can always be read
- * back from its url and a correct `srcSet` built without another database read.
+ * Older rows may name one file per bucket, `<base>-w<actualWidth>.<ext>`, so a
+ * variant's pixel width can always be read back from its url and a correct
+ * `srcSet` built without another database read.
  */
-
-/** Uploads up to 25MB are accepted. */
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
-
-/** The raster types a photo slot takes. */
-export const ACCEPTED_RASTER_TYPES = "image/png,image/jpeg,image/webp";
-/** What a normal (non-vector) uploader accepts. */
-export const ACCEPTED_IMAGE_TYPES = ACCEPTED_RASTER_TYPES;
-
-/** The responsive widths we render, smallest first. */
-export const IMAGE_VARIANT_WIDTHS = [400, 1200, 2560, 3840] as const;
-export type VariantWidth = (typeof IMAGE_VARIANT_WIDTHS)[number];
 
 /** One generated file. `width` is the actual longest edge after `inside` resize. */
 export interface ImageVariant {
@@ -124,18 +112,9 @@ export function buildSrcSet(
     .join(", ");
 }
 
-/** The largest generated variant - what a hero or a product main image wants. */
-export function largestVariantUrl(
-  variants: readonly ImageVariant[] | null | undefined,
-  fallback?: string | null,
-): string | null {
-  if (!variants || variants.length === 0) return fallback ?? null;
-  return [...variants].sort((a, b) => b.width - a.width)[0]!.url;
-}
-
 /**
- * Reconstruct the variant list from the four stored bucket urls. Used when a row
- * predates the pipeline (or came from the seeder) and only has whole urls.
+ * Reconstruct the variant list from four stored bucket urls. Used when a row
+ * predates the variant pipeline (or came from the seeder) and only has whole urls.
  */
 export function variantsFromUrls(
   urls: readonly (string | null | undefined)[],

@@ -1,9 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Alert, Button, Card, EmptyState, Input, cx } from "./ui";
 import { Icon } from "./icons";
+import { ImageLinkInput } from "./ImageLinkInput";
 import type { MediaSlotState } from "@/lib/media-slots";
 
 type LibraryFile = {
@@ -36,7 +37,7 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
+  const [linkValue, setLinkValue] = useState("");
 
   const active = slots.find((s) => s.def.key === activeKey) ?? slots[0] ?? null;
 
@@ -123,53 +124,6 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
       );
       flash(url ? "Slot updated." : "Slot cleared.");
       setLibraryOpen(false);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function upload(file: File) {
-    if (!active) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("slot", active.def.key);
-
-      const res = await fetch("/api/admin/uploads", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Upload failed.");
-        return;
-      }
-
-      await assign(data.url);
-      await loadLibrary();
-    } catch {
-      setError("Upload failed.");
-    } finally {
-      setBusy(false);
-      if (fileInput.current) fileInput.current.value = "";
-    }
-  }
-
-  async function removeFile(id: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/admin/uploads", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Could not delete that file.");
-        return;
-      }
-      await loadLibrary();
-      flash("File deleted.");
     } finally {
       setBusy(false);
     }
@@ -266,23 +220,23 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
           )}
 
           <div className="mt-4 space-y-3">
-            <input
-              ref={fileInput}
-              type="file"
-              className="hidden"
-              accept={active?.def.kind === "vector" ? "image/svg+xml,image/png,image/jpeg,image/webp" : "image/png,image/jpeg,image/webp"}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void upload(f);
-              }}
+            <ImageLinkInput
+              value={linkValue}
+              onChange={setLinkValue}
+              label=""
+              disabled={!active || busy}
+              hint="Paste an image link. It is stored as text, so it survives a redeploy."
             />
             <Button
               className="w-full"
-              disabled={!active || busy}
-              onClick={() => fileInput.current?.click()}
+              disabled={!active || busy || !linkValue.trim()}
+              onClick={() => {
+                const url = linkValue.trim();
+                if (url) void assign(url).then(() => setLinkValue(""));
+              }}
             >
               <Icon name="plus" className="h-4 w-4" />
-              {busy ? "Working…" : "Upload & assign"}
+              Use this link
             </Button>
             <Button
               variant="secondary"
@@ -296,10 +250,6 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
               <Icon name="image" className="h-4 w-4" />
               Choose from library
             </Button>
-            <p className="text-xs text-fg-soft">
-              JPG, PNG or WebP up to 5 MB.
-              {active?.def.kind === "vector" ? " SVG is allowed for this slot." : ""}
-            </p>
           </div>
         </Card>
 
@@ -315,8 +265,8 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
             {filtered.length === 0 ? (
               <div className="mt-4">
                 <EmptyState
-                  title="No files yet"
-                  description="Upload an image to start the library."
+                  title="Library is empty"
+                  description="Paste an image link to fill this slot."
                 />
               </div>
             ) : (
@@ -339,15 +289,6 @@ export function MediaManager({ initialSlots }: { initialSlots: MediaSlotState[] 
                           unoptimized
                         />
                       </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(f.id)}
-                      disabled={busy}
-                      aria-label={`Delete ${f.original_name ?? "image"}`}
-                      className="absolute right-1 top-1 hidden rounded bg-black/70 p-1 text-white group-hover:block"
-                    >
-                      <Icon name="trash" className="h-3.5 w-3.5" />
                     </button>
                     <p className="mt-1 truncate text-[10px] text-fg-soft">
                       {kb(f.bytes)}

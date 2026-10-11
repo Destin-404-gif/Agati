@@ -77,6 +77,7 @@ export default function ResponsiveImage({
         loading={priority ? "eager" : "lazy"}
         fetchPriority={priority ? "high" : "auto"}
         decoding="async"
+        referrerPolicy="no-referrer"
         onLoad={() => setLoaded(true)}
         className={`relative h-full w-full transition-opacity duration-500 motion-reduce:transition-none ${
           loaded || !placeholderUrl ? "opacity-100" : "opacity-0"

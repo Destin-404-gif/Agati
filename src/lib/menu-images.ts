@@ -9,10 +9,9 @@ import {
 /**
  * Pictures for the empty right-hand column of each category mega menu.
  *
- * A menu image is an ordinary upload: `storeUpload` validated the bytes, re-encoded
- * them into the 400/1200/2560/3840 family and wrote the row in `media_uploads`.
- * This module only decides which of those files a given menu should show and in
- * what order.
+ * A menu picture is a pasted https image link stored as a string. This module
+ * decides which pictures a given menu shows and in what order, and resolves the
+ * variant family from any `media_uploads` row that predates the switch to links.
  *
  * A menu image is addressed by `categories.id`, because that is what the navbar
  * category bar is built from -- the "Bedroom" pill and the "Bedroom" menu are the
@@ -96,6 +95,7 @@ export async function getMenuImages(): Promise<MenuImage[]> {
     const rows = await query<MenuImageRow>(
       `SELECT ${SELECT_COLUMNS} ${FROM_CLAUSE}
         WHERE c.is_active = TRUE
+          AND mi.image_path IS NOT NULL AND TRIM(mi.image_path) <> ''
         ORDER BY c.sort_order, c.id, mi.sort_order, mi.id`,
     );
     return rows.map(toMenuImage);

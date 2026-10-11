@@ -3,9 +3,8 @@ import { z } from "zod";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { storeUpload } from "@/lib/media-upload";
+import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
 import {
-  MENU_IMAGE_MAX_BYTES,
   MENU_IMAGES_PER_CATEGORY,
   countMenuImages,
   findMenuCategory,
@@ -25,12 +24,8 @@ export const dynamic = "force-dynamic";
  * ones - the screen is built around the ten categories, not around the rows that
  * happen to exist.
  *
- * `POST` adds one picture: a multipart upload (`file`, `categoryId`, optional
- * `caption` and `linkUrl`) that runs through the shared `storeUpload` handler, so
- * the magic-byte sniff, the sharp re-encode into the 400/1200/2560 family, the
- * generated filename and the `media_uploads` row are the same ones product and
- * category pictures get. The 3MB cap for these panels is checked *before* that,
- * because the shared limit is the looser 25MB media limit.
+ * `POST` adds one picture from a pasted https link, stored as a string, so the
+ * board needs no local files at all.
  *
  * `PATCH` reorders one category: array order becomes `sort_order`.
  *
@@ -53,12 +48,8 @@ export const GET = withAuth(async () => {
 
 export const POST = withAuth(
   async ({ req, staff }) => {
-    const form = await req.formData().catch(() => null);
-    if (!form) {
-      return NextResponse.json({ error: "Upload could not be read." }, { status: 400 });
-    }
-
-    const categoryId = Number(form.get("categoryId"));
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const categoryId = Number(body.categoryId);
     if (!Number.isInteger(categoryId) || categoryId <= 0) {
       return NextResponse.json({ error: "Choose a category first." }, { status: 400 });
     }
@@ -68,26 +59,9 @@ export const POST = withAuth(
       return NextResponse.json({ error: "Unknown category." }, { status: 404 });
     }
 
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "No file was uploaded." }, { status: 400 });
-    }
+    const caption = normalizeCaption(typeof body.caption === "string" ? body.caption : null);
 
-    // Checked here, ahead of `storeUpload`, so the message names the limit this
-    // screen enforces rather than the media library's larger one.
-    if (file.size > MENU_IMAGE_MAX_BYTES) {
-      const mb = (file.size / (1024 * 1024)).toFixed(1);
-      return NextResponse.json(
-        { error: `That file is ${mb}MB. Menu images are limited to 3MB - resize it and try again.` },
-        { status: 400 },
-      );
-    }
-
-    const rawCaption = form.get("caption");
-    const caption = normalizeCaption(typeof rawCaption === "string" ? rawCaption : null);
-
-    const rawLink = form.get("linkUrl");
-    const rawLinkText = typeof rawLink === "string" ? rawLink : "";
+    const rawLinkText = typeof body.linkUrl === "string" ? body.linkUrl : "";
     const linkProblem = linkUrlProblem(rawLinkText);
     if (linkProblem) {
       return NextResponse.json({ error: linkProblem }, { status: 400 });
@@ -104,18 +78,22 @@ export const POST = withAuth(
       );
     }
 
-    // `null` slotKey means "a photo": jpg/png/webp only, judged by its magic bytes
-    // rather than its filename or the browser's MIME type.
-    const result = await storeUpload(file, null, staff.email);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+    const linkCandidate = typeof body.url === "string" ? body.url : "";
+    const problem = imageUrlProblem(linkCandidate);
+    if (problem) {
+      return NextResponse.json({ error: problem }, { status: 400 });
     }
+    const normalized = normalizeImageUrl(linkCandidate);
+    if (!normalized) {
+      return NextResponse.json({ error: "Paste an image link." }, { status: 400 });
+    }
+    const imagePath = normalized;
 
     const rows = await query<{ id: number }>(
       `INSERT INTO menu_images (category_id, image_path, caption, link_url, sort_order)
             VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-      [categoryId, result.upload.url, caption, linkUrl, existing],
+      [categoryId, imagePath, caption, linkUrl, existing],
     );
     const id = rows[0].id;
 
@@ -125,8 +103,7 @@ export const POST = withAuth(
       entityId: id,
       after: {
         category: category.slug,
-        url: result.upload.url,
-        bytes: result.upload.bytes,
+        url: imagePath,
         caption,
         link_url: linkUrl,
       },
@@ -139,8 +116,8 @@ export const POST = withAuth(
       {
         ok: true,
         id,
-        url: result.upload.url,
-        thumbUrl: result.upload.thumbUrl,
+        url: imagePath,
+        thumbUrl: imagePath,
         categoryId,
         slot: existing,
       },

@@ -7,24 +7,13 @@
  * `media-slots.ts` already make. The queries live in `menu-images.ts`, which
  * re-exports everything here for server callers.
  *
- * A menu image is an ordinary upload: `storeUpload` validated the bytes and
- * re-encoded them into the 400/1200/2560/3840 family. What is specific to a menu
- * is the shape (up to three per category, in order) and the one thing the shared
- * uploader cannot vet for us - where the picture is allowed to link to.
+ * A menu picture is a pasted https image link, stored as a string. What is
+ * specific to a menu is the shape (up to three per category, in order) and where
+ * the picture is allowed to link to.
  */
 
 /** The panel shows at most this many pictures per category. */
 export const MENU_IMAGES_PER_CATEGORY = 3;
-
-/**
- * Menu pictures are small panels, so they get a tighter cap than the 25MB media
- * limit. The route checks this before `storeUpload`, because that helper has its
- * own (larger) limit and would otherwise accept a file this screen rejects.
- */
-export const MENU_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
-
-/** What the file input offers. Mirrors the server's magic-byte allowlist. */
-export const MENU_IMAGE_TYPES = "image/png,image/jpeg,image/webp";
 
 /** Longest caption, matching the column width. */
 const CAPTION_MAX = 200;
@@ -106,21 +95,4 @@ export function linkUrlProblem(raw: string | null | undefined): string | null {
 export function normalizeCaption(raw: string | null | undefined): string | null {
   const value = (raw ?? "").trim().slice(0, CAPTION_MAX);
   return value === "" ? null : value;
-}
-
-/** Client-side twin of the server's own checks, so a bad file never uploads. */
-export function menuImageFileProblem(file: File): string | null {
-  const name = file.name.toLowerCase();
-  const looksRight =
-    ["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
-    /\.(jpe?g|png|webp)$/.test(name);
-
-  if (!looksRight) {
-    return `${file.name}: only JPG, PNG or WebP images can be used here.`;
-  }
-  if (file.size > MENU_IMAGE_MAX_BYTES) {
-    const mb = (file.size / (1024 * 1024)).toFixed(1);
-    return `${file.name}: that file is ${mb}MB. Menu images are limited to 3MB.`;
-  }
-  return null;
 }

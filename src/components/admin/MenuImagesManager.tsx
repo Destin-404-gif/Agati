@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { ACCEPTED_IMAGE_TYPES, uploadWithProgress } from "./ImageUploader";
+import { useCallback, useState } from "react";
+import { imageUrlProblem } from "@/lib/image-link";
+import { ImageLinkInput } from "./ImageLinkInput";
 import { Icon } from "./icons";
 import { useConfirmState } from "./overlays";
 import { useToast } from "./Toast";
@@ -9,7 +10,6 @@ import { Alert, Badge, Button, Card, Field, Input, Spinner, cx } from "./ui";
 import {
   MENU_IMAGES_PER_CATEGORY,
   linkUrlProblem,
-  menuImageFileProblem,
   type AdminMenuCategory,
   type AdminMenuImage,
 } from "@/lib/menu-image-rules";
@@ -18,13 +18,10 @@ import {
  * The admin half of the mega-menu pictures: one card per category, three slots
  * each.
  *
- * Every file goes up through the shared `uploadWithProgress` XHR helper to
- * `/api/admin/menu-images`, which is the same `storeUpload` pipeline the product,
- * category and gallery uploads use - magic-byte sniff, sharp re-encode into the
- * 400/1200/2560 family, generated filename, `media_uploads` row. Only the 3MB cap
- * and the caption/link are specific to a menu, and they are checked on both sides:
- * `menuImageFileProblem` here so a bad file never leaves the browser, and again in
- * the route, which is the check that actually counts.
+ * Each picture is set by pasting an https image link, which is stored as a
+ * string (`linkTo` → `POST`/`PATCH /api/admin/menu-images`). The 3MB file cap is
+ * gone with the uploader; the caption and the optional link are still validated
+ * on both sides through `linkUrlProblem`.
  *
  * The preview at the top is a drawing of the storefront panel, not an iframe: it
  * reads the same draft state the slots write to, so it shows the panel's two
@@ -109,71 +106,46 @@ export function MenuImagesManager({
     [],
   );
 
-  /* ------------------------------------------------------------- uploading */
+  /* --------------------------------------------------------- image links */
 
-  async function upload(category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) {
-    const problem = menuImageFileProblem(file);
+  /** Attach a pasted image link to an empty slot, or swap it onto a saved one. */
+  async function linkTo(category: AdminMenuCategory, slotKey: string, url: string, slot: Slot) {
+    const problem = imageUrlProblem(url);
     if (problem) {
       setError(slotKey, problem);
       return;
     }
 
-    const linkProblem = linkUrlProblem(slot.draft?.linkUrl);
-    if (linkProblem) {
-      setError(slotKey, linkProblem);
-      return;
-    }
-
     setBusy(slotKey);
     setError(slotKey, null);
-
     try {
-      const res = await uploadWithProgress(file, "/api/admin/menu-images", {
-        fields: {
-          categoryId: String(category.id),
-          caption: slot.draft?.caption ?? "",
-          linkUrl: slot.draft?.linkUrl ?? "",
-        },
+      const body = JSON.stringify({
+        categoryId: category.id,
+        url,
+        caption: slot.draft?.caption ?? "",
+        linkUrl: slot.draft?.linkUrl ?? "",
       });
-      if (res.error) {
-        setError(slotKey, res.error);
-        return;
-      }
-
-      toast.success(`Added to ${category.name}.`);
-      await refresh();
-    } catch (err) {
-      setError(slotKey, err instanceof Error ? err.message : "Upload failed.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /** Replace the file in a saved slot: delete the old row, then upload. */
-  async function replace(category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) {
-    if (!slot.saved) return;
-
-    // Everything that can reject the new file is checked before the old row goes
-    // away, so a mistyped picture never costs the admin the one already there.
-    const problem = menuImageFileProblem(file) ?? linkUrlProblem(slot.draft?.linkUrl);
-    if (problem) {
-      setError(slotKey, problem);
-      return;
-    }
-
-    setBusy(slotKey);
-    setError(slotKey, null);
-    try {
-      const res = await fetch(`/api/admin/menu-images/${slot.saved.id}`, { method: "DELETE" });
+      const res = slot.saved
+        ? await fetch(`/api/admin/menu-images/${slot.saved.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ imagePath: url }),
+          })
+        : await fetch("/api/admin/menu-images", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(slotKey, data.error ?? "Could not remove the old picture.");
+        setError(slotKey, data.error ?? "Could not save that link.");
         return;
       }
+      toast.success(slot.saved ? "Picture updated." : `Added to ${category.name}.`);
       await refresh();
-      await upload(category, slotKey, file, slot);
     } catch {
       setError(slotKey, "Could not reach the server. Check your connection and retry.");
+    } finally {
       setBusy(null);
     }
   }
@@ -335,8 +307,7 @@ export function MenuImagesManager({
           category={category}
           busy={busy}
           slotError={slotError}
-          onUpload={upload}
-          onReplace={replace}
+          onLink={linkTo}
           onSaveText={saveText}
           onRemove={remove}
           onMove={move}
@@ -355,8 +326,7 @@ function CategoryCard({
   category,
   busy,
   slotError,
-  onUpload,
-  onReplace,
+  onLink,
   onSaveText,
   onRemove,
   onMove,
@@ -365,8 +335,7 @@ function CategoryCard({
   category: AdminMenuCategory;
   busy: string | null;
   slotError: Record<string, string>;
-  onUpload: (category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) => Promise<void>;
-  onReplace: (category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) => Promise<void>;
+  onLink: (category: AdminMenuCategory, slotKey: string, url: string, slot: Slot) => Promise<void>;
   onSaveText: (category: AdminMenuCategory, image: AdminMenuImage, patch: Partial<Draft>) => Promise<void>;
   onRemove: (category: AdminMenuCategory, image: AdminMenuImage) => void;
   onMove: (category: AdminMenuCategory, index: number, delta: number) => Promise<void>;
@@ -420,8 +389,7 @@ function CategoryCard({
               error={slotError[slot.key]}
               textBusy={busy === `${category.id}:${slot.saved?.id}`}
               textError={slot.saved ? slotError[`${category.id}:${slot.saved.id}`] : undefined}
-              onUpload={onUpload}
-              onReplace={onReplace}
+              onLink={onLink}
               onSaveText={onSaveText}
               onRemove={onRemove}
               onMove={onMove}
@@ -445,8 +413,7 @@ function SlotCard({
   error,
   textBusy,
   textError,
-  onUpload,
-  onReplace,
+  onLink,
   onSaveText,
   onRemove,
   onMove,
@@ -460,16 +427,24 @@ function SlotCard({
   error?: string;
   textBusy: boolean;
   textError?: string;
-  onUpload: (category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) => Promise<void>;
-  onReplace: (category: AdminMenuCategory, slotKey: string, file: File, slot: Slot) => Promise<void>;
+  onLink: (category: AdminMenuCategory, slotKey: string, url: string, slot: Slot) => Promise<void>;
   onSaveText: (category: AdminMenuCategory, image: AdminMenuImage, patch: Partial<Draft>) => Promise<void>;
   onRemove: (category: AdminMenuCategory, image: AdminMenuImage) => void;
   onMove: (category: AdminMenuCategory, index: number, delta: number) => Promise<void>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const saved = slot.saved;
   const draft = slot.draft;
+  // A row survives the missing-image cleanup with its image_path set to NULL, so
+  // "saved" and "has a picture" are two different things from now on.
+  const hasPicture = Boolean(saved?.imagePath);
   const full = total >= MENU_IMAGES_PER_CATEGORY && !saved;
+  const [linkValue, setLinkValue] = useState("");
+
+  const sendLink = () => {
+    const url = linkValue.trim();
+    if (!url || busy) return;
+    void onLink(category, slot.key, url, slot).then(() => setLinkValue(""));
+  };
 
   return (
     <div className="space-y-3 rounded-xl border border-outline bg-surface p-3">
@@ -505,22 +480,14 @@ function SlotCard({
       </div>
 
       <div
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const file = event.dataTransfer.files?.[0];
-          if (!file || full || busy) return;
-          if (saved) void onReplace(category, slot.key, file, slot);
-          else void onUpload(category, slot.key, file, slot);
-        }}
         className={cx(
           "relative flex h-40 items-center justify-center overflow-hidden rounded-xl border border-dashed bg-field",
           full && "opacity-60",
         )}
       >
-        {saved ? (
+        {saved && hasPicture ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={saved.imagePath} alt="" className="h-full w-full object-cover" />
+          <img src={saved.imagePath} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
         ) : full ? (
           <span className="px-4 text-center text-xs text-fg-muted">
             This slot is empty.
@@ -529,7 +496,7 @@ function SlotCard({
           <span className="flex flex-col items-center gap-1 text-fg-faint">
             <Icon name="image" className="h-6 w-6" />
             <span className="text-[10px] font-semibold uppercase tracking-wide">
-              Drop or choose
+              No picture
             </span>
           </span>
         )}
@@ -541,30 +508,26 @@ function SlotCard({
         )}
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPTED_IMAGE_TYPES}
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file || full) return;
-          if (saved) void onReplace(category, slot.key, file, slot);
-          else void onUpload(category, slot.key, file, slot);
-        }}
+      <ImageLinkInput
+        label=""
+        value={linkValue}
+        onChange={setLinkValue}
+        disabled={busy}
+        hint={
+          saved
+            ? "Paste a link to replace this picture."
+            : "Paste an https image link."
+        }
       />
 
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           size="sm"
-          variant="secondary"
-          loading={busy}
-          disabled={full || (saved ? undefined : total >= MENU_IMAGES_PER_CATEGORY)}
-          onClick={() => inputRef.current?.click()}
+          disabled={busy || !linkValue.trim()}
+          onClick={sendLink}
         >
-          {saved ? "Replace" : "Choose file"}
+          {saved ? "Replace" : "Use link"}
         </Button>
         {saved && saved.originalName && (
           <span className="self-center truncate text-xs text-fg-muted" title={saved.originalName}>
@@ -572,10 +535,6 @@ function SlotCard({
           </span>
         )}
       </div>
-
-      {!saved && !full && (
-        <p className="text-xs text-fg-muted">JPG, PNG or WebP up to 3MB.</p>
-      )}
 
       {(error || textError) && (
         <p className="text-xs font-medium text-terracotta">{error ?? textError}</p>
@@ -638,7 +597,9 @@ function SlotCard({
  * so what the admin sees here is the arrangement the website will use.
  */
 function PanelPreview({ category }: { category: AdminMenuCategory }) {
-  const images = category.images;
+  // Mirror the storefront: a marked-missing picture (image_path cleared) is not
+  // drawn, so the preview's layout matches what the public menu will do.
+  const images = category.images.filter((image) => image.imagePath);
 
   return (
     <div className="rounded-2xl border border-outline bg-[#f6f6f4] p-5">

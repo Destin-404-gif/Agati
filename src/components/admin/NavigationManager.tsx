@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { uploadWithProgress } from "./ImageUploader";
+import { ImageLinkInput } from "./ImageLinkInput";
 import { ImageField } from "./overlays";
 import { Alert, Button, Checkbox, Field, Input, Textarea } from "./ui";
 import { Icon } from "./icons";
@@ -11,8 +11,6 @@ const NAVBARS: { key: NavbarKey; label: string }[] = [
   { key: "top_bar", label: "Top bar" },
   { key: "category_bar", label: "Category bar" },
 ];
-
-const inputClass = "w-full rounded-xl border border-outline bg-field px-3 py-2 text-sm text-fg";
 
 export function NavigationManager() {
   const [navigation, setNavigation] = useState<NavigationData>({ top_bar: [], category_bar: [] });
@@ -24,7 +22,6 @@ export function NavigationManager() {
   const [addingSection, setAddingSection] = useState(false);
   const [newItem, setNewItem] = useState({ label: "", icon: "Package", description: "" });
   const [newSection, setNewSection] = useState({ name: "", groupLabel: "Shop by type", description: "", icon: "Package" });
-  const [iconProgress, setIconProgress] = useState(0);
   const [error, setError] = useState("");
 
   const items = navigation[navbar];
@@ -240,12 +237,6 @@ export function NavigationManager() {
     setSectionDraft(sections[0] ?? null);
   }
 
-  async function uploadIcon(file: File) {
-    setIconProgress(0);
-    const result = await uploadWithProgress(file, "/api/admin/uploads", { onProgress: setIconProgress });
-    if (sectionDraft && result.url) setSectionDraft({ ...sectionDraft, icon: result.url });
-  }
-
   return (
     <div className="space-y-5">
       {error && <Alert tone="error">{error}</Alert>}
@@ -351,11 +342,13 @@ export function NavigationManager() {
                       <Field label="Lucide icon name"><Input value={sectionDraft.icon.startsWith("/") ? "" : sectionDraft.icon} onChange={(event) => setSectionDraft({ ...sectionDraft, icon: event.target.value })} /></Field>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Icon image upload">
-                        <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadIcon(file).catch((err: unknown) => setError(err instanceof Error ? err.message : "Icon upload failed.")); }} className={inputClass} />
-                        {iconProgress > 0 && iconProgress < 100 && <progress className="mt-1 w-full" value={iconProgress} max={100} />}
-                      </Field>
-                      <ImageField value={sectionDraft.image ?? ""} onChange={(image) => setSectionDraft({ ...sectionDraft, image })} label="Section image" hint="Upload an image or enter a URL." />
+                      <ImageLinkInput
+                        value={sectionDraft.icon.startsWith("/") ? "" : sectionDraft.icon}
+                        onChange={(icon) => setSectionDraft({ ...sectionDraft, icon })}
+                        label="Icon image"
+                        hint="Paste a link to an icon image, or use the Lucide icon name above."
+                      />
+                      <ImageField value={sectionDraft.image ?? ""} onChange={(image) => setSectionDraft({ ...sectionDraft, image })} label="Section image" hint="Paste an image link." />
                     </div>
                     <div className="flex flex-wrap items-center gap-4">
                       <Checkbox label="Visible" checked={sectionDraft.is_active} onChange={(event) => setSectionDraft({ ...sectionDraft, is_active: event.target.checked })} />

@@ -40,3 +40,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch / one-off scripts (kept on disk, never committed)
+_auth.mjs
+_dbg.mjs
+_modal.mjs
+_upload.mjs
+_probe.jpg
+fix7.mjs
+temp_run.mjs
+temp_team.sql
+test_team.sql
+tmp.ps1
+*.zip
+
+# runtime uploads (Render filesystem is ephemeral; images live as https links)
+/storage/

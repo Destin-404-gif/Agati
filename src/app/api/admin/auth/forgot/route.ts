@@ -34,14 +34,16 @@ export async function POST(req: Request) {
 
     if (staff && staff.isActive) {
       const { token, hash } = newResetToken();
+      // Retire any outstanding link first, then insert the new one. Doing it the
+      // other way round would immediately mark the just-created token as used.
+      await query(
+        "UPDATE password_resets SET used_at = NOW() WHERE staff_id = $1 AND used_at IS NULL",
+        [staff.id],
+      );
       await query(
         `INSERT INTO password_resets (staff_id, token_hash, expires_at)
          VALUES ($1, $2, NOW() + ($3 || ' minutes')::interval)`,
         [staff.id, hash, String(RESET_TTL_MINUTES)],
-      );
-      await query(
-        "UPDATE password_resets SET used_at = NOW() WHERE staff_id = $1 AND used_at IS NULL",
-        [staff.id],
       );
       await logAudit({
         action: "password_reset",

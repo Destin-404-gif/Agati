@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
-import { removeStoredFiles } from "@/lib/media-upload";
+import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
 import { revalidateGallery } from "@/lib/revalidate";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
  *
  * `PATCH` merges whichever fields were sent over the row that is already there,
  * so the grid can save a single edit without sending the whole item back.
- * `DELETE` removes the row *and* the file on disk - a gallery item owns its
- * picture, so leaving the bytes behind would orphan them.
+ * `DELETE` removes the row; the picture itself lives on whatever host the link
+ * points at, so there are no local bytes to clean up.
  */
 
 function parseId(raw: string | undefined): number | null {
@@ -58,6 +58,7 @@ export const PATCH = withAuth<{ id: string }>(
       altText?: unknown;
       isPublished?: unknown;
       sortOrder?: unknown;
+      imageUrl?: unknown;
     };
 
     const current = await query<GalleryRow>(
@@ -85,19 +86,45 @@ export const PATCH = withAuth<{ id: string }>(
           ? Number(body.sortOrder)
           : row.sort_order;
 
+    // Replace the picture when a new URL was sent. A link has no variant family,
+    // so the old ones are cleared; the old local file is removed if it was ours.
+    let imageUrl = row.image_url;
+    let clearVariants = false;
+    if (body.imageUrl !== undefined) {
+      const raw = body.imageUrl === null ? "" : String(body.imageUrl);
+      if (raw.trim()) {
+        const problem = imageUrlProblem(raw);
+        if (problem) {
+          return NextResponse.json({ error: problem }, { status: 400 });
+        }
+        const normalized = normalizeImageUrl(raw);
+        if (normalized !== row.image_url) {
+          imageUrl = normalized;
+          clearVariants = true;
+        }
+      }
+    }
+
     const rows = await query<GalleryRow>(
       `UPDATE gallery_items
-          SET title = $2, caption = $3, alt_text = $4,
-              is_published = $5, sort_order = $6
+          SET image_url = $2, title = $3, caption = $4, alt_text = $5,
+              is_published = $6, sort_order = $7,
+              thumbnail_url = CASE WHEN $8 THEN $2 ELSE thumbnail_url END,
+              variant_400_url = CASE WHEN $8 THEN NULL ELSE variant_400_url END,
+              variant_1200_url = CASE WHEN $8 THEN NULL ELSE variant_1200_url END,
+              variant_2560_url = CASE WHEN $8 THEN NULL ELSE variant_2560_url END,
+              variant_3840_url = CASE WHEN $8 THEN NULL ELSE variant_3840_url END
         WHERE id = $1
         RETURNING ${ROW_COLUMNS}`,
       [
         id,
+        imageUrl,
         asText(body.title, 150, row.title),
         asText(body.caption, 2000, row.caption),
         asText(body.altText, 300, row.alt_text),
         body.isPublished === undefined ? row.is_published : Boolean(body.isPublished),
         sortOrder,
+        clearVariants,
       ],
     );
 
@@ -131,8 +158,6 @@ export const DELETE = withAuth<{ id: string }>(
     if (rows.length === 0) {
       return NextResponse.json({ error: "Unknown gallery item." }, { status: 404 });
     }
-
-    await removeStoredFiles([rows[0].image_url, rows[0].thumbnail_url]);
 
     await logAudit({
       action: "delete",

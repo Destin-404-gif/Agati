@@ -95,6 +95,7 @@ export default function MediaImage({
       alt={alt ?? asset.alt}
       fill={fill}
       className={className}
+      referrerPolicy="no-referrer"
       {...rest}
     />
   );
