@@ -3,6 +3,7 @@ import { z } from "zod";
 import { readJson, withAuth } from "@/lib/admin-api";
 import { logAudit } from "@/lib/audit";
 import { query } from "@/lib/db";
+import { imageUrlProblem, normalizeImageUrl } from "@/lib/image-link";
 import { ensureMediaSlot } from "@/lib/media";
 
 export const dynamic = "force-dynamic";

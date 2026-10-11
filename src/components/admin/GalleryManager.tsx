@@ -59,69 +59,28 @@ export function GalleryManager({ initialItems }: { initialItems: GalleryItemRow[
     setItems(data.rows ?? []);
   }
 
-  const handleFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0 || uploading.current) return;
-      uploading.current = true;
-      setError(null);
-
-      const entries: QueueEntry[] = files.map((file) => ({
-        key: `q${++seq}`,
-        name: file.name,
-        percent: 0,
-        done: false,
-        error: null,
-      }));
-      setQueue(entries);
-
-      let succeeded = 0;
-      let failed = 0;
-
-      for (const [index, file] of files.entries()) {
-        const key = entries[index]!.key;
-        const patch = (next: Partial<QueueEntry>) =>
-          setQueue((prev) => prev.map((e) => (e.key === key ? { ...e, ...next } : e)));
-
-        const problem = localFileProblem(file);
-        if (problem) {
-          failed += 1;
-          patch({ error: problem, done: true });
-          continue;
-        }
-
-        try {
-          const data = await uploadWithProgress(file, "/api/admin/gallery", {
-            onProgress: (percent) => patch({ percent }),
-          });
-          if (data.item) {
-            setItems((prev) => [...prev, data.item as GalleryItemRow]);
-          }
-          succeeded += 1;
-          patch({ percent: 100, done: true });
-        } catch (err) {
-          failed += 1;
-          patch({
-            error: err instanceof Error ? err.message : "Upload failed.",
-            done: true,
-          });
-        }
+  /** Add a photo by pasting its link. */
+  async function addByLink() {
+    const url = linkValue.trim();
+    if (!url) return;
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/gallery", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = (await res.json().catch(() => ({}))) as GalleryItemRow & {
+        item?: GalleryItemRow;
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Could not add that link.");
+        return;
       }
-
-      uploading.current = false;
-      if (failed > 0) {
-        // Never report a clean success when some files did not make it: the
-        // per-row errors above name each failure, this makes the count obvious.
-        toast.error(
-          `${failed} of ${files.length} ${files.length === 1 ? "image" : "images"} failed to upload. See the list above.`,
-        );
-      } else {
-        toast.success(
-          `${succeeded} ${succeeded === 1 ? "image" : "images"} uploaded.`,
-        );
-      }
-      // The queue clears itself once every row has finished, so the grid is not
-      // permanently pushed down by a stale list.
-      window.setTimeout(() => setQueue([]), 2500);
+      if (data.item) setItems((prev) => [...prev, data.item as GalleryItemRow]);
+      setLinkValue("");
+      toast.success("Photo added.");
       await refresh();
     } catch {
       setError("Could not add that link. Check your connection and retry.");
