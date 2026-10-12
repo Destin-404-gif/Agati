@@ -11,6 +11,7 @@ import {
   ADDRESS_LINES,
   CONTACT,
   LOCATION,
+  LOGO_SRC,
   OPENING_HOURS,
   SITE,
   SOCIALS,
@@ -69,15 +70,15 @@ export default function Footer({ logo }: { logo: MediaAsset | null }) {
             <div className="mt-16 grid gap-10 border-t border-cream/10 pt-12 sm:grid-cols-2 lg:grid-cols-[1.5fr_repeat(3,1fr)]">
               <div>
                 <Link href="/" className="group inline-flex items-center gap-3">
-                  {logo ? (
-                    <Image
-                      src={logo.url}
-                      alt={SITE.name}
-                      width={88}
-                      height={77}
-                      className="h-11 w-auto object-contain opacity-95 transition-opacity duration-300 group-hover:opacity-100"
-                    />
-                  ) : null}
+                  {/* Same source as the header: DB slot when set, committed mark
+                      otherwise, so the footer never loses the mark. */}
+                  <Image
+                    src={logo?.url ?? LOGO_SRC}
+                    alt={SITE.name}
+                    width={88}
+                    height={77}
+                    className="h-11 w-auto object-contain opacity-95 transition-opacity duration-300 group-hover:opacity-100"
+                  />
                   <span className="flex flex-col leading-none">
                     <span className="font-display text-3xl font-black uppercase tracking-[-0.03em] text-cream">
                       {BRAND.name}

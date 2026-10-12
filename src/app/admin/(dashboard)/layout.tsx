@@ -4,7 +4,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { ToastProvider } from "@/components/admin/Toast";
 import { query } from "@/lib/db";
 import { getMedia } from "@/lib/media";
-import { LOGO } from "@/lib/images";
+import { LOGO_SRC } from "@/lib/siteConfig";
 import { getCurrentStaff } from "@/lib/staff";
 import type { ShellAlert } from "@/components/admin/AdminShell";
 
@@ -87,7 +87,7 @@ export default async function AdminLayout({
           permissions: staff.permissions,
         }}
         alerts={alerts}
-        logo={media.logo?.url ?? LOGO}
+        logo={media.logo?.url ?? LOGO_SRC}
       >
         {children}
       </AdminShell>

@@ -140,6 +140,23 @@ export const SITE = {
   founded: "2019",
 } as const;
 
+/* ------------------------------------------------------------------- logo */
+
+/**
+ * The brand mark, served from `public/images/`. This is the single source of
+ * truth for the storefront header, the footer, the admin sidebar, the favicon
+ * and the Open Graph card - none of them may hardcode the path again.
+ *
+ * The file MUST stay committed to git: the public website reads the DB-driven
+ * `media_slots.logo` first and falls back to this committed file, so a missing
+ * or empty upload never leaves the header blank.
+ */
+export const LOGO_SRC = "/images/agati-logo.png";
+/** Intrinsic size of the mark, for `next/image` and the OG card. */
+export const LOGO_WIDTH = 533;
+export const LOGO_HEIGHT = 468;
+export const LOGO_ALT = SITE.name;
+
 /* --------------------------------------------------------------------- JSON */
 
 /**

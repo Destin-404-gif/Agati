@@ -1,11 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { NavigationIcon } from "./NavigationIcon";
 import type { NavigationData, NavbarKey } from "@/lib/navigation-data";
+import { LOGO_SRC, SITE } from "@/lib/siteConfig";
 import SearchBar from "./SearchBar";
 
 type MobileDrawerProps = {
@@ -63,9 +65,21 @@ export default function MobileDrawer({ open, onClose, navigation }: MobileDrawer
             className="fixed inset-y-0 left-0 z-[61] flex w-[min(24rem,92vw)] flex-col bg-cream shadow-lift lg:hidden"
           >
             <div className="flex items-center justify-between border-b border-espresso/10 px-5 py-4">
-              <p className="font-display text-lg font-black uppercase tracking-[-0.02em] text-espresso">
-                AGATI <span className="text-[9px] font-semibold tracking-[0.3em] text-espresso/50">WOOD WORKS</span>
-              </p>
+              <Link
+                href="/"
+                onClick={onClose}
+                aria-label={`${SITE.name} - home`}
+                className="flex items-center"
+              >
+                <Image
+                  src={LOGO_SRC}
+                  alt={SITE.name}
+                  width={96}
+                  height={84}
+                  priority
+                  className="h-9 w-auto object-contain"
+                />
+              </Link>
               <button
                 type="button"
                 onClick={onClose}

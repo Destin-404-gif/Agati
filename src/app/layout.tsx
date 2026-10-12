@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
-import { localBusinessJsonLd, SITE } from "@/lib/siteConfig";
+import {
+  localBusinessJsonLd,
+  LOGO_ALT,
+  LOGO_HEIGHT,
+  LOGO_SRC,
+  LOGO_WIDTH,
+  SITE,
+} from "@/lib/siteConfig";
 import "./globals.css";
 
 /**
@@ -43,11 +50,20 @@ export const metadata: Metadata = {
     siteName: SITE.name,
     locale: "en_RW",
     type: "website",
+    images: [
+      {
+        url: LOGO_SRC,
+        width: LOGO_WIDTH,
+        height: LOGO_HEIGHT,
+        alt: LOGO_ALT,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: `${SITE.name} - Solid hardwood & custom furniture`,
     description: SITE.description,
+    images: [LOGO_SRC],
   },
 };
 

@@ -82,7 +82,11 @@ const photoFiles = entries
   .filter((e) => e.isFile() && /\.(jpe?g|png|webp)$/i.test(e.name))
   .map((e) => e.name)
   .sort();
-const logoFile = photoFiles.find((f) => /logo/i.test(f));
+// Prefer the background-removed export when present, so the transparent mark
+// wins even though a plain "agati logo.png" may also sit in the folder.
+const logoFile =
+  photoFiles.find((f) => /removebg/i.test(f)) ??
+  photoFiles.find((f) => /logo/i.test(f));
 const photoNames = photoFiles.filter((f) => f !== logoFile);
 
 /** Optimise + content-hash every photo. Returns { name, hash, ratio }. */
@@ -169,8 +173,10 @@ let logo = null;
 if (logoFile) {
   const input = path.join(SRC_DIR, logoFile);
   const meta = await sharp(input).metadata();
+  // Lossless: the mark is already a background-removed export, and palette
+  // quantization would soften its anti-aliased edges.
   const buf = await sharp(input)
-    .png({ compressionLevel: 9, quality: 92 })
+    .png({ compressionLevel: 9 })
     .toBuffer();
   await fs.writeFile(path.join(OUT_DIR, "agati-logo.png"), buf);
   logo = { src: "/images/agati-logo.png", w: meta.width, h: meta.height, bytes: buf.length };

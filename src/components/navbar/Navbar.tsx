@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useScroll } from "framer-motion";
 import { ArrowRight, Heart, Mail, Menu, Phone, Search, ShoppingBag, User, X } from "lucide-react";
 import { useCart } from "@/components/cart/CartProvider";
-import { CONTACT, SITE } from "@/lib/siteConfig";
+import { CONTACT, LOGO_SRC, SITE } from "@/lib/siteConfig";
 import type { MediaAsset } from "@/lib/media-slots";
 import { DatabaseMegaMenu } from "./DatabaseMegaMenu";
 import MobileDrawer from "./MobileDrawer";
@@ -48,20 +48,17 @@ function BrandLogo({ logo }: { logo: MediaAsset | null }) {
       aria-label={`${SITE.name} - home`}
       className="group flex shrink-0 items-center"
     >
-      {logo ? (
-        <Image
-          src={logo.url}
-          alt={SITE.name}
-          width={96}
-          height={84}
-          priority
-          className="h-12 w-auto shrink-0 object-contain transition-opacity duration-300 group-hover:opacity-90"
-        />
-      ) : (
-        <span className="font-display text-2xl font-black uppercase tracking-[-0.03em] text-espresso">
-          Agati
-        </span>
-      )}
+      {/* The admin-managed slot wins when set; otherwise the committed mark is
+          used, so the header is never empty (and never a dark wordmark that
+          disappears over the hero). */}
+      <Image
+        src={logo?.url ?? LOGO_SRC}
+        alt={SITE.name}
+        width={96}
+        height={84}
+        priority
+        className="h-12 w-auto shrink-0 object-contain transition-opacity duration-300 group-hover:opacity-90"
+      />
     </Link>
   );
 }
