@@ -10,6 +10,7 @@ import { categoryItems, findCategory, subcategoryHref } from "@/lib/navigation";
 import { gallerySlot, getMedia, GALLERY_COUNT, type MediaAsset } from "@/lib/media";
 import { getProducts, getSubcategories } from "@/lib/queries";
 import { categoryMatches, subcategoryMatches } from "@/lib/search";
+import { LOCATION } from "@/lib/siteConfig";
 
 type Props = {
   params: Promise<{ category: string }>;
@@ -27,6 +28,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${entry.name} - Shop`,
     description: `Browse ${entry.name}, bench-made to order at the Agati Wood Works workshop.`,
+    // The DB-backed `/category/[slug]` route is the one the navbar and homepage
+    // link to; this parallel taxonomy would otherwise be a duplicate in the
+    // index. Keep it crawlable so links still flow through, but unindexed.
+    robots: { index: false, follow: true },
   };
 }
 
@@ -56,7 +61,7 @@ export default async function ShopCategoryPage({ params }: Props) {
       <PageHero
         eyebrow="Shop the range"
         title={`${category.name}\ncollection`}
-        intro={`${category.name} furniture, bench-made from solid timber in Bloomington. ${totalKinds} ways to start, every one built to order.`}
+        intro={`${category.name} furniture, bench-made from solid timber in ${LOCATION.label}. ${totalKinds} ways to start, every one built to order.`}
         illustrationSlug={category.slug}
         crumbs={[
           { label: "Catalogue", href: "/furniture" },

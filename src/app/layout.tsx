@@ -8,6 +8,7 @@ import {
   LOGO_WIDTH,
   SITE,
 } from "@/lib/siteConfig";
+import { websiteJsonLd } from "@/lib/seo";
 import "./globals.css";
 
 /**
@@ -89,6 +90,17 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify(localBusinessJsonLd()).replace(/</g, "\\u003c"),
+          }}
+        />
+        {/*
+          schema.org WebSite, with the storefront search exposed as a
+          SearchAction. Sitelinks searchbox markup only ever points at the
+          search route that already exists.
+        */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(websiteJsonLd()).replace(/</g, "\\u003c"),
           }}
         />
       </head>

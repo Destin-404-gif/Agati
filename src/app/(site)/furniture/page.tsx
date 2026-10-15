@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: "Furniture",
   description:
     "Solid hardwood armchairs, dining chairs and sofas - hand-cut joinery, hardwax oil finishes, made in Musanze, Rwanda. Made-to-measure pieces quoted per commission.",
+  alternates: { canonical: "/furniture" },
 };
 
 const HERO_KEY = pageHeroSlot("furniture");

@@ -46,6 +46,9 @@ export async function generateMetadata({ searchParams }: SearchPageProps): Promi
     description: term
       ? `Search results for “${term}” across the Agati Wood Works catalogue.`
       : "Find the right piece - search the Agati Wood Works catalogue.",
+    // Result pages are infinite, query-driven and low-value for search; keep
+    // them out of the index but let bots follow the links into the catalogue.
+    robots: { index: false, follow: true },
   };
 }
 

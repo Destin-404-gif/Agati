@@ -17,7 +17,14 @@ async function findSection(navSlug: string, sectionSlug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { "nav-item-slug": navSlug, "section-slug": sectionSlug } = await params;
   const match = await findSection(navSlug, sectionSlug);
-  return { title: match?.section.name ?? "Shop" };
+  if (!match) return { title: "Shop" };
+  // The same section is reachable under `/category/...` when the parent is a
+  // category-bar item; that is the navbar's URL and therefore the canonical.
+  const canonical =
+    match.item.navbar === "category_bar"
+      ? `/category/${navSlug}/${sectionSlug}`
+      : `/${navSlug}/${sectionSlug}`;
+  return { title: match.section.name, alternates: { canonical } };
 }
 
 export default async function NavigationSectionPage({ params }: Props) {

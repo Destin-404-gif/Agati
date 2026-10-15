@@ -21,6 +21,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Contact Us",
   description: `Get a quote from ${SITE.name}. Tell us about your room, your timber and your deadline - we reply within two working days. Workshop in ${LOCATION.label}.`,
+  alternates: { canonical: "/contact" },
 };
 
 const HERO_KEY = pageHeroSlot("contact");

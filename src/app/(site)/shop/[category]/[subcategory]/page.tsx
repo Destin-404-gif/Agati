@@ -33,6 +33,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${entry.name} - Shop`,
     description: `${entry.name}, part of the ${category} collection at Agati Wood Works. Bench-made to order.`,
+    // Parallel to the DB-backed `/category/[category]/[subcategory]` route.
+    robots: { index: false, follow: true },
   };
 }
 

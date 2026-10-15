@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import PageHero from "@/components/PageHero";
 import ProductCard from "@/components/ProductCard";
 import { getCategories, getProducts } from "@/lib/queries";
+import { breadcrumbJsonLd } from "@/lib/seo";
+import { LOCATION } from "@/lib/siteConfig";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -14,7 +16,18 @@ async function getCategory(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const category = await getCategory(slug);
-  return { title: category?.name ?? "Shop" };
+  if (!category) return { title: "Shop" };
+
+  const description =
+    category.description ||
+    `Solid hardwood ${category.name.toLowerCase()} furniture, made to order in our ${LOCATION.label} workshop.`;
+
+  return {
+    title: category.name,
+    description,
+    alternates: { canonical: `/category/${category.slug}` },
+    openGraph: { title: category.name, description, url: `/category/${category.slug}` },
+  };
 }
 
 export default async function CategoryPage({ params }: Props) {
@@ -27,6 +40,17 @@ export default async function CategoryPage({ params }: Props) {
   ]);
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            breadcrumbJsonLd([
+              { name: "Home", path: "/" },
+              { name: category.name, path: `/category/${category.slug}` },
+            ]),
+          ).replace(/</g, "\\u003c"),
+        }}
+      />
       <PageHero
         eyebrow="Shop the range"
         title={category.name}

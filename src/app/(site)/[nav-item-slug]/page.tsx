@@ -15,7 +15,11 @@ async function findItem(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { "nav-item-slug": slug } = await params;
   const item = await findItem(slug);
-  return { title: item?.label ?? "Shop" };
+  if (!item) return { title: "Shop" };
+  // A category-bar slug is reachable at both `/slug` and `/category/slug`; the
+  // category route is the one the navbar links to, so it owns the canonical.
+  const canonical = item.navbar === "category_bar" ? `/category/${item.slug}` : `/${item.slug}`;
+  return { title: item.label, alternates: { canonical } };
 }
 
 export default async function NavigationItemPage({ params }: Props) {

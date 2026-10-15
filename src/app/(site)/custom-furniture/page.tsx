@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: "Custom Furniture",
   description:
     "One-off furniture built to your room. Drawings before we cut, a fixed price, and solid hardwood throughout. Tell us what you need.",
+  alternates: { canonical: "/custom-furniture" },
 };
 
 export const dynamic = "force-dynamic";

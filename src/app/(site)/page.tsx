@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import CategoryGrid from "@/components/CategoryGrid";
 import FeaturedCollection from "@/components/FeaturedCollection";
 import Hero from "@/components/Hero";
@@ -8,6 +9,12 @@ import type { Category, Product } from "@/lib/types";
 
 // Storefront content changes rarely and must always be fresh.
 export const dynamic = "force-dynamic";
+
+/** Title and description are inherited from the root layout; the homepage needs
+ *  only to declare itself the canonical `/`. */
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 async function loadHomepageData() {
   try {

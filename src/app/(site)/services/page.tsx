@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   title: "Services",
   description:
     "Custom furniture, millwork and built-ins, timber supply, restoration and repair, finishing and installation, and trade or contract work.",
+  alternates: { canonical: "/services" },
 };
 
 // Banners and service photos come from the database, so no prerendering.

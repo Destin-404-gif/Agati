@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import ProductCard from "@/components/ProductCard";
 import ProductDetailClient from "@/components/furniture/ProductDetailClient";
 import { getProductBySlug, getProducts } from "@/lib/queries";
+import { breadcrumbJsonLd, productJsonLd } from "@/lib/seo";
 import { LOCATION, SITE } from "@/lib/siteConfig";
 
 export const dynamic = "force-dynamic";
@@ -18,13 +19,16 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const description =
     product.description?.slice(0, 155) ??
     `${product.name} from ${SITE.name}, made in ${LOCATION.label}.`;
+  const path = `/furniture/${product.slug}`;
 
   return {
     title: product.name,
     description,
+    alternates: { canonical: path },
     openGraph: {
       title: product.name,
       description,
+      url: path,
       images: product.image_url ? [{ url: product.image_url }] : undefined,
     },
   };
@@ -46,8 +50,26 @@ export default async function ProductPage({ params }: Params) {
     .filter((p) => p.id !== product.id)
     .slice(0, 4);
 
+  const breadcrumbs = breadcrumbJsonLd([
+    { name: "Home", path: "/" },
+    { name: "Furniture", path: "/furniture" },
+    { name: product.name, path: `/furniture/${product.slug}` },
+  ]);
+
   return (
     <div className="mx-auto w-full max-w-6xl px-5 pb-24 pt-32 sm:px-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(productJsonLd(product)).replace(/</g, "\\u003c"),
+        }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbs).replace(/</g, "\\u003c"),
+        }}
+      />
       <nav aria-label="Breadcrumb" className="mb-8 text-[11px] uppercase tracking-[0.14em]">
         <ol className="flex flex-wrap items-center gap-2 text-espresso/40">
           <li>

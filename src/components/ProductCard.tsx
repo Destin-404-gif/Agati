@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { money } from "@/lib/format";
 import type { Product } from "@/lib/types";
 import AddToCartButton from "./cart/AddToCartButton";
@@ -31,17 +32,27 @@ export default function ProductCard({ product, index = 0, tone = "light" }: Prod
       ].join(" ")}
     >
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-[1.5rem] bg-cream">
-        {product.image_url ? (
-          <Image
-            src={product.image_url}
-            alt={product.name}
-            fill
-            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
-            className="object-cover transition-transform duration-[900ms] ease-out group-hover:scale-110"
-          />
-        ) : (
-          <div className="size-full bg-sage/15" />
-        )}
+        {/* The tile is the only route to a product page, so the image is a real
+            link. It sits at z-0 and the action button is a later sibling, which
+            keeps the cart/quote control clickable rather than nesting it in an
+            anchor (a button inside a link is invalid). */}
+        <Link
+          href={`/furniture/${product.slug}`}
+          aria-label={product.name}
+          className="absolute inset-0 z-0 block"
+        >
+          {product.image_url ? (
+            <Image
+              src={product.image_url}
+              alt={product.name}
+              fill
+              sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
+              className="object-cover transition-transform duration-[900ms] ease-out group-hover:scale-110"
+            />
+          ) : (
+            <div className="size-full bg-sage/15" />
+          )}
+        </Link>
 
         {product.is_custom && (
           <span className="absolute left-3 top-3 rounded-full bg-espresso px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-cream">
@@ -74,7 +85,14 @@ export default function ProductCard({ product, index = 0, tone = "light" }: Prod
 
       <div className="flex items-start justify-between gap-4 px-3 pb-2 pt-5">
         <div className="min-w-0">
-          <h3 className="truncate text-[15px] font-semibold text-espresso">{product.name}</h3>
+          <h3 className="truncate text-[15px] font-semibold text-espresso">
+            <Link
+              href={`/furniture/${product.slug}`}
+              className="transition-colors hover:text-terracotta"
+            >
+              {product.name}
+            </Link>
+          </h3>
           <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-espresso/40">
             {product.category_name ?? "Uncategorised"}
           </p>

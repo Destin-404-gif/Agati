@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   title: "Our Projects",
   description:
     "Commissions delivered by Agati Wood Works: full-wall libraries, hospitality fit-outs, retreats and single commissions in solid hardwood.",
+  alternates: { canonical: "/projects" },
 };
 
 // Banners and project photos come from the database, so no prerendering.

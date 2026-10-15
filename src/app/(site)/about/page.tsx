@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: "About Us",
   description:
     "Eleven makers, one sawmill, and a stubborn belief that furniture should be repairable rather than disposable. Agati Wood Works in Musanze, Rwanda since 2019.",
+  alternates: { canonical: "/about" },
 };
 
 export const dynamic = "force-dynamic";

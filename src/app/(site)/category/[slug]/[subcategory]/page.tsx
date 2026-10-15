@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import PageHero from "@/components/PageHero";
 import ProductCard from "@/components/ProductCard";
 import { getCategories, getProducts, getSubcategories } from "@/lib/queries";
+import { breadcrumbJsonLd } from "@/lib/seo";
+import { LOCATION } from "@/lib/siteConfig";
 
 type Props = { params: Promise<{ slug: string; subcategory: string }> };
 
@@ -18,7 +20,18 @@ async function getCategoryAndSubcategory(slug: string, subcategorySlug: string) 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, subcategory } = await params;
   const match = await getCategoryAndSubcategory(slug, subcategory);
-  return { title: match?.subcategory.name ?? "Shop" };
+  if (!match) return { title: "Shop" };
+
+  const { category, subcategory: sub } = match;
+  const path = `/category/${category.slug}/${sub.slug}`;
+  const description = `${sub.name} in the ${category.name} collection - solid hardwood, made to order in our ${LOCATION.label} workshop.`;
+
+  return {
+    title: sub.name,
+    description,
+    alternates: { canonical: path },
+    openGraph: { title: `${sub.name} · ${category.name}`, description, url: path },
+  };
 }
 
 export default async function SubcategoryPage({ params }: Props) {
@@ -32,6 +45,18 @@ export default async function SubcategoryPage({ params }: Props) {
   ]);
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(
+            breadcrumbJsonLd([
+              { name: "Home", path: "/" },
+              { name: category.name, path: `/category/${category.slug}` },
+              { name: subcategory.name, path: `/category/${category.slug}/${subcategory.slug}` },
+            ]),
+          ).replace(/</g, "\\u003c"),
+        }}
+      />
       <PageHero
         eyebrow={`${category.name} collection`}
         title={subcategory.name}

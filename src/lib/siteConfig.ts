@@ -128,12 +128,26 @@ export const DEFAULT_PAYMENT_METHOD: PaymentMethodId = "pay_on_delivery";
 
 /* ------------------------------------------------------------------ branding */
 
+/**
+ * Public origin for canonical URLs, the sitemap and JSON-LD.
+ *
+ * `NEXT_PUBLIC_SITE_URL` wins when it is set (and is inlined into client
+ * bundles at build time), so pointing the site at a real domain is an env
+ * change and nothing more. Until a custom domain is configured it falls back to
+ * the host the site is actually served from, so metadata never advertises a
+ * hostname that does not resolve. Trailing slashes are trimmed so
+ * `${SITE.url}/path` can never double up.
+ */
+const SITE_URL =
+  (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim().replace(/\/+$/, "") ||
+  "https://agati.onrender.com";
+
 export const SITE = {
   name: "Agati Wood Works",
   legalName: "Agati Wood Works",
   shortName: "Agati",
   /** Bare origin - no trailing slash - for canonical URLs and JSON-LD. */
-  url: "https://agatiwoodworks.com",
+  url: SITE_URL,
   tagline: "Solid hardwood furniture and custom woodworks, made in Musanze, Rwanda.",
   description:
     "Solid hardwood furniture, custom builds, millwork and timber supply. Steam-bent, hand-cut and finished in hardwax oil in our Musanze workshop, Rwanda.",

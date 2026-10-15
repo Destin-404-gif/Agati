@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Team",
   description:
     "The makers behind Agati Wood Works - the people who run the sawmill, fill the drying racks and keep the furniture repairable.",
+  alternates: { canonical: "/team" },
 };
 
 // The roster and the banner come from the database.

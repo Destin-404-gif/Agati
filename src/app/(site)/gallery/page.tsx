@@ -9,6 +9,7 @@ export const metadata: Metadata = {
   title: "Gallery",
   description:
     "Bent ash, bookmatched walnut, hand-cut dovetails, fumed oak and the finishing room - the workshop, up close.",
+  alternates: { canonical: "/gallery" },
 };
 
 // The banner and the photographs both come from the database.
